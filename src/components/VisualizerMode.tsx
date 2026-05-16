@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { AudioEngine } from '../utils/audio';
-import { getChordNotes, calculateOptimalPianoRange, formatChordName } from '../utils/chord-utils';
+import { getChordNotes, calculateOptimalPianoRange, formatChordName, normalizeNoteToSharp } from '../utils/chord-utils';
 import { createPiano, populateNoteSelector, populateChordTypeSelector } from '../utils/piano-renderer';
 import { MUSICAL_INTERVALS, INDEX_TO_SHARP_NAME, INDEX_TO_FLAT_NAME, NOTE_TO_INDEX } from '../utils/constants';
 import type { SequenceItem, ShowInspectorFn } from '../types';
@@ -18,13 +18,33 @@ const VisualizerMode: React.FC<VisualizerModeProps> = ({ audioEngine, showInspec
   const [bassNote, setBassNote] = useState<string | undefined>(undefined);
   const [inversion, setInversion] = useState<number>(0);
   const [alterations, setAlterations] = useState<string[]>([]);
+  const [additions, setAdditions] = useState<string[]>([]);
   const [currentChord, setCurrentChord] = useState<SequenceItem>({ rootNote: 'C', type: 'Mayor' });
+
+  const ALTERATION_CONFLICT_PAIRS: [string, string][] = [['b5', '#5'], ['b9', '#9']];
 
   const pianoContainerRef = useRef<HTMLDivElement>(null);
   const rootNoteSelectRef = useRef<HTMLSelectElement>(null);
   const chordTypeSelectRef = useRef<HTMLSelectElement>(null);
   const bassNoteSelectRef = useRef<HTMLSelectElement>(null);
-  const inversionSelectRef = useRef<HTMLSelectElement>(null);
+
+  // Opciones de inversión: notas base + notas añadidas
+  const inversionOptions = useMemo(() => {
+    const intervals = MUSICAL_INTERVALS[chordType];
+    const baseCount = intervals ? intervals.length : 0;
+    const count = baseCount + additions.length;
+    return Array.from({ length: count }, (_, i) => ({
+      value: i,
+      label: i === 0 ? 'Fundamental' : `${i}ª Inversión`,
+    }));
+  }, [chordType, additions]);
+
+  // Resetea la inversión si el nuevo tipo de acorde tiene menos notas
+  useEffect(() => {
+    if (inversionOptions.length > 0 && inversion >= inversionOptions.length) {
+      setInversion(0);
+    }
+  }, [inversionOptions, inversion]);
 
   // Se actualiza el objeto del acorde cada vez que cambia una de sus partes
   useEffect(() => {
@@ -33,9 +53,10 @@ const VisualizerMode: React.FC<VisualizerModeProps> = ({ audioEngine, showInspec
       type: chordType,
       bassNote: bassNote === 'none' ? undefined : bassNote,
       inversion,
-      alterations,
+      alterations: alterations.length > 0 ? alterations : undefined,
+      additions: additions.length > 0 ? additions : undefined,
     });
-  }, [rootNote, chordType, bassNote, inversion, alterations]);
+  }, [rootNote, chordType, bassNote, inversion, alterations, additions]);
 
   const handlePlayChord = useCallback(async () => {
     audioEngine.playChord(currentChord);
@@ -47,12 +68,12 @@ const VisualizerMode: React.FC<VisualizerModeProps> = ({ audioEngine, showInspec
   const handleChordNameClick = useCallback(() => {
     showInspector(currentChord, {
       onUpdate: (updatedItem) => {
-        // Actualiza el visualizador con los cambios del inspector
         setRootNote(updatedItem.rootNote);
         setChordType(updatedItem.type);
         setBassNote(updatedItem.bassNote);
         setInversion(updatedItem.inversion || 0);
         setAlterations(updatedItem.alterations || []);
+        setAdditions(updatedItem.additions || []);
       }
     });
   }, [currentChord, showInspector]);
@@ -82,11 +103,11 @@ const VisualizerMode: React.FC<VisualizerModeProps> = ({ audioEngine, showInspec
     const allNotes = [...new Set([...INDEX_TO_SHARP_NAME, ...INDEX_TO_FLAT_NAME])].sort((a, b) => NOTE_TO_INDEX[a] - NOTE_TO_INDEX[b] || a.localeCompare(b));
     if (rootNoteSelectRef.current) {
       populateNoteSelector(rootNoteSelectRef.current, allNotes);
-      rootNoteSelectRef.current.value = rootNote;
+      rootNoteSelectRef.current.value = normalizeNoteToSharp(rootNote);
     }
     if (bassNoteSelectRef.current) {
       populateNoteSelector(bassNoteSelectRef.current, allNotes, true);
-      bassNoteSelectRef.current.value = bassNote || 'none';
+      bassNoteSelectRef.current.value = bassNote ? normalizeNoteToSharp(bassNote) : 'none';
     }
   }, [bassNote, rootNote]);
 
@@ -95,30 +116,7 @@ const VisualizerMode: React.FC<VisualizerModeProps> = ({ audioEngine, showInspec
       populateChordTypeSelector(chordTypeSelectRef.current, rootNote, chordType);
       chordTypeSelectRef.current.value = chordType;
     }
-
-    if (inversionSelectRef.current) {
-      const selectedType = chordType;
-      const intervals = MUSICAL_INTERVALS[selectedType];
-      const numNotes = intervals ? intervals.length : 0;
-      let currentInversion = inversion;
-
-      inversionSelectRef.current.innerHTML = '';
-
-      if (numNotes > 0) {
-        for (let i = 0; i < numNotes; i++) {
-          const option = document.createElement('option');
-          option.value = i.toString();
-          option.textContent = i === 0 ? 'Fundamental' : `${i}ª Inversión`;
-          inversionSelectRef.current.appendChild(option);
-        }
-        if (currentInversion >= numNotes) {
-          setInversion(0);
-          currentInversion = 0;
-        }
-        inversionSelectRef.current.value = currentInversion.toString();
-      }
-    }
-  }, [rootNote, chordType, inversion]);
+  }, [rootNote, chordType]);
 
   return (
     <>
@@ -137,19 +135,26 @@ const VisualizerMode: React.FC<VisualizerModeProps> = ({ audioEngine, showInspec
         </div>
         <div className="selector">
           <label className="selector-label" htmlFor="visualizer-inversion-select">INVERSIÓN</label>
-          <select id="visualizer-inversion-select" className="selector-box" ref={inversionSelectRef} onChange={(e) => setInversion(parseInt(e.target.value, 10))}></select>
+          <select id="visualizer-inversion-select" className="selector-box" value={inversion} onChange={(e) => setInversion(parseInt(e.target.value, 10))}>
+            {inversionOptions.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
         </div>
       </div>
 
       <div className="alteraciones">
         {EDITABLE_ALTERATIONS.map(alt => (
-            <button 
+            <button
                 key={alt}
                 className={`mod-button ${alterations.includes(alt) ? 'active' : ''}`}
                 onClick={() => {
-                    setAlterations(prev => 
-                        prev.includes(alt) ? prev.filter(a => a !== alt) : [...prev, alt]
-                    );
+                    setAlterations(prev => {
+                        if (prev.includes(alt)) return prev.filter(a => a !== alt);
+                        const conflict = ALTERATION_CONFLICT_PAIRS.find(p => p.includes(alt))?.find(p => p !== alt);
+                        const base = conflict ? prev.filter(a => a !== conflict) : prev;
+                        return [...base, alt];
+                    });
                 }}
             >
                 {alt}

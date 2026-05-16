@@ -31,32 +31,36 @@ interface ChordDefinition {
 
 export const CHORD_DEFINITIONS: ChordDefinition[] = [
     // Tríadas
-    { id: 'Mayor',      name: 'Mayor',         symbol: '',      intervals: [0, 4, 7],  aliases: ['M'],         uiGroup: 'Tríadas', uiText: 'Mayor' },
-    { id: 'Menor',      name: 'Menor',         symbol: 'm',     intervals: [0, 3, 7],  aliases: ['min', '-'],  uiGroup: 'Tríadas', uiText: 'm' },
+    { id: 'Mayor',      name: 'Mayor',         symbol: '',      intervals: [0, 4, 7],  aliases: ['M', 'Ma'],         uiGroup: 'Tríadas', uiText: 'Mayor' },
+    { id: 'Menor',      name: 'Menor',         symbol: 'm',     intervals: [0, 3, 7],  aliases: ['min', '-', 'mi'],  uiGroup: 'Tríadas', uiText: 'm' },
     { id: '5',          name: '5 (Power Chord)', symbol: '5',   intervals: [0, 7],                            uiGroup: 'Tríadas', uiText: '5' },
     { id: 'Aumentado',  name: 'Aumentado',     symbol: 'aug',   intervals: [0, 4, 8],  aliases: ['+'],         uiGroup: 'Tríadas', uiText: 'aug / +' },
-    { id: 'Disminuido', name: 'Disminuido',    symbol: 'dim',   intervals: [0, 3, 6],  aliases: ['°'],         uiGroup: 'Tríadas', uiText: 'dim / °' },
+    { id: 'Disminuido', name: 'Disminuido',    symbol: 'dim',   intervals: [0, 3, 6],  aliases: ['°', 'o'],    uiGroup: 'Tríadas', uiText: 'dim / °' },
     // Sextas
     { id: '6',          name: 'Sexta',         symbol: '6',     intervals: [0, 4, 7, 9],                      uiGroup: 'Sextas', uiText: '6' },
     { id: 'm6',         name: 'Menor Sexta',   symbol: 'm6',    intervals: [0, 3, 7, 9],                      uiGroup: 'Sextas', uiText: 'm6' },
     // Séptimas
     { id: '7',          name: '7 (Dominante)', symbol: '7',     intervals: [0, 4, 7, 10],                     uiGroup: 'Séptimas', uiText: '7 (Dominante)' },
-    { id: 'm7',         name: 'Menor Séptima', symbol: 'm7',    intervals: [0, 3, 7, 10],                     uiGroup: 'Séptimas', uiText: 'm7' },
-    { id: 'maj7',       name: 'Mayor Séptima', symbol: 'maj7',  intervals: [0, 4, 7, 11], aliases: ['M7'],    uiGroup: 'Séptimas', uiText: 'maj7' },
+    { id: 'm7',         name: 'Menor Séptima', symbol: 'm7',    intervals: [0, 3, 7, 10],  aliases: ['mi7'],   uiGroup: 'Séptimas', uiText: 'm7' },
+    { id: 'maj7',       name: 'Mayor Séptima', symbol: 'maj7',  intervals: [0, 4, 7, 11], aliases: ['M7', 'Δ7', 'Δ', 'Ma7'], uiGroup: 'Séptimas', uiText: 'maj7' },
     { id: 'm(maj7)',    name: 'Menor (con 7ma Mayor)', symbol: 'm(maj7)', intervals: [0, 3, 7, 11],           uiGroup: 'Séptimas', uiText: 'm(maj7)' },
-    { id: 'dim7',       name: 'Disminuido 7',  symbol: 'dim7',  intervals: [0, 3, 6, 9],  aliases: ['°7'],    uiGroup: 'Séptimas', uiText: '°7 (dim7)' },
-    { id: 'm7b5',       name: 'Semidisminuido 7', symbol: 'm7b5', intervals: [0, 3, 6, 10], aliases: ['ø7'],  uiGroup: 'Séptimas', uiText: 'ø7 (m7b5)' },
+    { id: '7#5',        name: 'Dominante Aumentado', symbol: '7(#5)', intervals: [0, 4, 8, 10], aliases: ['aug7', '+7'], uiGroup: 'Séptimas', uiText: '7#5 (aug7)' },
+    { id: 'dim7',       name: 'Disminuido 7',  symbol: 'dim7',  intervals: [0, 3, 6, 9],  aliases: ['°7', 'o7'],  uiGroup: 'Séptimas', uiText: '°7 (dim7)' },
+    { id: 'm7b5',       name: 'Semidisminuido 7', symbol: 'm7b5', intervals: [0, 3, 6, 10], aliases: ['ø7', 'ø', 'Ø7', 'Ø'], uiGroup: 'Séptimas', uiText: 'ø7 (m7b5)' },
     // Novenas
     { id: '9',          name: 'Novena',        symbol: '9',     intervals: [0, 4, 7, 10, 14],                 uiGroup: 'Novenas', uiText: '9' },
     { id: 'm9',         name: 'Menor Novena',  symbol: 'm9',    intervals: [0, 3, 7, 10, 14],                 uiGroup: 'Novenas', uiText: 'm9' },
     { id: 'maj9',       name: 'Mayor Novena',  symbol: 'maj9',  intervals: [0, 4, 7, 11, 14],                 uiGroup: 'Novenas', uiText: 'maj9' },
+    { id: 'add9',       name: 'Mayor con Novena Añadida', symbol: 'add9', intervals: [0, 4, 7, 14],            uiGroup: 'Novenas', uiText: 'add9' },
     { id: 'madd9',      name: 'Menor con Novena Añadida', symbol: 'madd9', intervals: [0, 3, 7, 14],           uiGroup: 'Novenas', uiText: null },
     { id: '7b9',        name: '7ma con 9na bemol', symbol: '7(b9)', intervals: [0, 4, 7, 10, 13],             uiGroup: 'Novenas', uiText: '7b9' },
     { id: '7#9',        name: '7ma con 9na aumentada', symbol: '7(#9)', intervals: [0, 4, 7, 10, 15],         uiGroup: 'Novenas', uiText: '7#9' },
     // Otras Extensiones
-    { id: '6/9',        name: 'Sexta/Novena',  symbol: '6/9',   intervals: [0, 4, 9, 14],                     uiGroup: 'Otras Extensiones', uiText: '6/9' },
+    { id: '6/9',        name: 'Sexta/Novena',  symbol: '6/9',   intervals: [0, 4, 7, 9, 14],                  uiGroup: 'Otras Extensiones', uiText: '6/9' },
+    { id: '11',         name: 'Onceava (Dominante)', symbol: '11', intervals: [0, 4, 7, 10, 14, 17],           uiGroup: 'Otras Extensiones', uiText: '11' },
     { id: 'm11',        name: 'Menor Onceava', symbol: 'm11',   intervals: [0, 3, 7, 10, 14, 17],             uiGroup: 'Otras Extensiones', uiText: 'm11' },
     { id: '13',         name: 'Treceava',      symbol: '13',    intervals: [0, 4, 7, 10, 14, 21],             uiGroup: 'Otras Extensiones', uiText: '13' },
+    { id: '7#11',       name: 'Dominante con 11na aumentada', symbol: '7(#11)', intervals: [0, 4, 7, 10, 18], uiGroup: 'Otras Extensiones', uiText: '7#11' },
     { id: 'maj7#11',    name: 'Maj7 con 11na aumentada', symbol: 'maj7(#11)', intervals: [0, 4, 7, 11, 18],   uiGroup: 'Otras Extensiones', uiText: null },
     // Suspendidos
     { id: 'sus2',       name: 'Suspendido 2',  symbol: 'sus2',  intervals: [0, 2, 7],                         uiGroup: 'Suspendidos', uiText: 'sus2' },

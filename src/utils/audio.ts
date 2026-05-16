@@ -8,14 +8,15 @@ let isAudioReady = false;
 // --- CAMBIO AQUÍ ---
 // Nueva función exportada para inicializar el contexto de audio.
 // Debe ser llamada desde un evento de usuario (ej. click).
-export async function initAudio(): Promise<void> {
-    if (isAudioReady) return;
+export async function initAudio(): Promise<boolean> {
+    if (isAudioReady) return true;
     try {
         await Tone.start();
         isAudioReady = true;
-        console.log('Audio context started successfully.');
+        return true;
     } catch (e) {
         console.error('Failed to start audio context:', e);
+        return false;
     }
 }
 
@@ -23,35 +24,34 @@ export class AudioEngine {
     private sampler: Tone.Sampler | null = null;
     private isSamplerReady = false;
     private isInitializing = false;
+    private onError: ((msg: string) => void) | null = null;
 
-    constructor() {
-        // La inicialización del sampler ahora se dispara en el constructor,
-        // pero no bloquea. Se cargará en segundo plano.
+    constructor(onError?: (msg: string) => void) {
+        this.onError = onError ?? null;
         this.initSampler();
     }
 
-    // Método privado para cargar el sampler.
     private async initSampler(): Promise<void> {
         if (this.isSamplerReady || this.isInitializing) return;
-        
+
         this.isInitializing = true;
         try {
             this.sampler = new Tone.Sampler({
                 urls: {
-                    A2: "A2.mp3", C3: "C3.mp3", "D#3": "Ds3.mp3", "F#3": "Fs3.mp3", 
-                    A3: "A3.mp3", C4: "C4.mp3", "D#4": "Ds4.mp3", "F#4": "Fs4.mp3", 
+                    A2: "A2.mp3", C3: "C3.mp3", "D#3": "Ds3.mp3", "F#3": "Fs3.mp3",
+                    A3: "A3.mp3", C4: "C4.mp3", "D#4": "Ds4.mp3", "F#4": "Fs4.mp3",
                     A4: "A4.mp3", C5: "C5.mp3", "D#5": "Ds5.mp3", "F#5": "Fs5.mp3",
                     A5: "A5.mp3",
                 },
                 release: 1,
                 baseUrl: "https://tonejs.github.io/audio/salamander/",
             }).toDestination();
-            
+
             await Tone.loaded();
             this.isSamplerReady = true;
-            
         } catch (e) {
             console.error("Tone.js sampler failed to initialize:", e);
+            this.onError?.("No se pudo cargar el sintetizador de audio.");
         } finally {
             this.isInitializing = false;
         }

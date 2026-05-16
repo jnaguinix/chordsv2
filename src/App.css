@@ -1,67 +1,379 @@
-/* Estilos para el contenedor del piano */
-.piano-header-container {
-  padding: 1rem;
+/* ============================================ */
+/* Editor Header: Piano (izquierda) + Controles (derecha) */
+/* ============================================ */
+.editor-header-row {
   display: flex;
-  justify-content: center;
   align-items: center;
-  border-bottom: 1px solid #27272a; /* Borde ligeramente más claro */
-  min-height: 120px;
-}
-
-/* === Estilos de botones Neón Terminal === */
-.transposition-controls-group {
-  display: flex;
   justify-content: center;
-  align-items: center; /* Alinea verticalmente los items */
-  flex-wrap: wrap;
-  gap: 12px;
-  padding: 1rem 0; /* Añade algo de padding vertical */
+  gap: 1.5rem;
+  padding: 0.4rem 1rem;
+  border-bottom: 1px solid #27272a;
+  flex-shrink: 0;
 }
 
-.terminal-button {
-  background: transparent;
-  color: #00bfff;
-  border: 1px solid transparent; /* Usar borde transparente */
-  box-shadow: inset 0 0 0 1px #00bfff; /* Simular borde con box-shadow */
-  font-family: 'Courier New', monospace; /* Coincide con la fuente del ejemplo */
+/* Panel de controles a la derecha del piano */
+.editor-controls-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* Fila de transposición */
+.transpose-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Fila de acciones */
+.actions-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* En pantallas con poca altura, compactar */
+@media (max-height: 800px) {
+  .editor-header-row {
+    padding: 0.25rem 0.5rem;
+    gap: 0.75rem;
+  }
+  .editor-header-row .piano .white {
+    height: 110px;
+  }
+}
+
+/* ============================================ */
+/* Control Segment — Botones conectados (− Original +) */
+/* ============================================ */
+.ctrl-segment {
+  display: flex;
+  align-items: stretch;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #3a3a3a;
+  background: #1a1a1a;
+}
+
+.ctrl-segment .ctrl-btn {
+  border-radius: 0;
+  border: none;
+  border-right: 1px solid #333;
+}
+
+.ctrl-segment .ctrl-btn:last-child {
+  border-right: none;
+}
+
+.ctrl-segment .seg-left,
+.ctrl-segment .seg-right {
+  padding: 6px 12px;
   font-size: 14px;
-  padding: 8px 16px;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  border-radius: 5px;
-  transition: all 0.2s ease-in-out;
-  cursor: pointer;
-  display: inline-flex; /* Para alinear el contenido del botón/div */
+  font-weight: 600;
+  min-width: 32px;
+}
+
+/* Display central del segmento (Original / +2 / -3 etc.) */
+.ctrl-display {
+  display: flex;
   align-items: center;
   justify-content: center;
-  box-sizing: border-box; /* Asegura consistencia en el tamaño */
+  padding: 6px 14px;
+  font-family: 'Fira Mono', 'Courier New', monospace;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  color: #99ff33;
+  background: #1a1a1a;
+  border-right: 1px solid #333;
+  min-width: 70px;
+  text-align: center;
+  user-select: none;
 }
 
-.terminal-button:hover {
-  background: #00bfff;
-  color: #111;
-  box-shadow: 0 0 6px #00bfff;
-  transform: scale(1.03);
+/* ============================================ */
+/* Botón Base                                   */
+/* ============================================ */
+.ctrl-btn {
+  font-family: 'Fira Mono', 'Courier New', monospace;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  box-sizing: border-box;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s, transform 0.1s;
+  color: #ccc;
+  background: #2a2a2a;
 }
 
-.terminal-button.danger {
-  color: #ffb84d;
-  border-color: transparent; /* Mantener borde transparente */
-  box-shadow: inset 0 0 0 1px #ffaa00; /* Cambiar el color del shadow */
+.ctrl-btn:hover {
+  background: #3a3a3a;
+  color: #fff;
 }
 
-.terminal-button.danger:hover {
-  background-color: #ffaa00;
-  color: #111;
-  box-shadow: 0 0 6px #ffaa00;
+.ctrl-btn:active {
+  transform: scale(0.97);
 }
 
-@keyframes blink {
-  0%, 100% { box-shadow: 0 0 8px #00bfff; }
-  50%      { box-shadow: 0 0 2px #00bfff; }
+/* ============================================ */
+/* Variantes de Botón                           */
+/* ============================================ */
+
+/* Ghost — Botones de acción sutiles (Exportar, Importar) */
+.ctrl-btn.ghost {
+  background: transparent;
+  color: #888;
+  border: 1px solid #333;
 }
 
-.terminal-button.active {
-  animation: blink 1s infinite;
-  box-shadow: 0 0 8px #00bfff; /* Estado inicial del shadow */
+.ctrl-btn.ghost:hover {
+  background: #2a2a2a;
+  color: #ccc;
+  border-color: #4a4a4a;
 }
+
+/* Muted — Reset y acciones secundarias */
+.ctrl-btn.muted {
+  background: transparent;
+  color: #666;
+  font-size: 11px;
+  padding: 6px 10px;
+  letter-spacing: 0.3px;
+}
+
+.ctrl-btn.muted:hover {
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.08);
+}
+
+/* ============================================ */
+/* Icono dentro de botones                      */
+/* ============================================ */
+.ctrl-icon {
+  font-size: 11px;
+  opacity: 0.6;
+}
+
+/* ============================================ */
+/* Divider vertical entre grupos                */
+/* ============================================ */
+.ctrl-divider {
+  width: 1px;
+  height: 20px;
+  background: #333;
+  margin: 0 2px;
+  flex-shrink: 0;
+}
+
+/* ============================================ */
+/* Select de tonalidad                          */
+/* ============================================ */
+.selector-inline {
+  display: flex;
+  align-items: center;
+}
+
+.ctrl-select {
+  font-family: 'Fira Mono', 'Courier New', monospace;
+  font-size: 12px;
+  padding: 5px 10px;
+  background: #1a1a1a;
+  color: #99ff33;
+  border: 1px solid #333;
+  border-radius: 6px;
+  cursor: pointer;
+  min-width: 110px;
+  transition: border-color 0.15s;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  padding-right: 26px;
+}
+
+.ctrl-select:hover {
+  border-color: #555;
+}
+
+.ctrl-select:focus {
+  outline: none;
+  border-color: #99ff33;
+  box-shadow: 0 0 0 2px rgba(153, 255, 51, 0.1);
+}
+
+/* ============================================ */
+/* Layout principal del editor                  */
+/* ============================================ */
+.main-content {
+  flex: 1 1 0;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* ============================================ */
+/* Chord Popover — Sugerencias inline           */
+/* ============================================ */
+.chord-popover {
+  position: fixed;
+  z-index: 1000;
+  width: 320px;
+  max-height: 280px;
+  background: rgba(22, 22, 26, 0.95);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(153, 255, 51, 0.2);
+  border-radius: 10px;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+  overflow: hidden;
+  animation: popover-in 0.15s ease-out;
+  font-family: 'Fira Mono', 'Courier New', monospace;
+}
+
+@keyframes popover-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.chord-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.chord-popover-title {
+  font-size: 11px;
+  color: #888;
+  letter-spacing: 0.3px;
+}
+
+.chord-popover-title strong {
+  color: #99ff33;
+  font-size: 12px;
+}
+
+.chord-popover-close {
+  background: none;
+  border: none;
+  color: #555;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+  transition: color 0.15s;
+}
+
+.chord-popover-close:hover {
+  color: #fff;
+}
+
+.chord-popover-body {
+  max-height: 220px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #333 transparent;
+}
+
+.chord-popover-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+}
+
+.chord-popover-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 12px;
+  cursor: pointer;
+  transition: background 0.12s;
+  border-left: 2px solid transparent;
+}
+
+.chord-popover-item:hover {
+  background: rgba(153, 255, 51, 0.06);
+  border-left-color: #99ff33;
+}
+
+.chord-popover-chord {
+  font-size: 13px;
+  font-weight: 600;
+  color: #60a5fa;
+}
+
+.chord-popover-item:hover .chord-popover-chord {
+  color: #93c5fd;
+}
+
+.chord-popover-technique {
+  font-size: 10px;
+  color: #666;
+  letter-spacing: 0.2px;
+  text-align: right;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chord-popover-item:hover .chord-popover-technique {
+  color: #888;
+}
+
+.chord-popover-empty {
+  padding: 16px 12px;
+  text-align: center;
+  color: #555;
+  font-size: 11px;
+}
+
+/* ============================================ */
+/* Toast notification                           */
+/* ============================================ */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-family: 'Fira Mono', 'Courier New', monospace;
+  font-size: 12px;
+  z-index: 500;
+  pointer-events: none;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  animation: toast-in 0.2s ease-out;
+}
+.toast-success {
+  background: rgba(22, 22, 26, 0.97);
+  border: 1px solid rgba(153, 255, 51, 0.4);
+  color: #99ff33;
+}
+.toast-error {
+  background: rgba(22, 22, 26, 0.97);
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  color: #f87171;
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+

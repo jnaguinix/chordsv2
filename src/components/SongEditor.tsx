@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { EditorView, ViewUpdate } from '@codemirror/view';
-import { EditorState, StateEffect } from '@codemirror/state';
+import { EditorState } from '@codemirror/state';
 import { HighlightStyle, StreamLanguage, syntaxHighlighting } from '@codemirror/language';
 import { tags } from '@lezer/highlight';
 import { syntaxTree } from "@codemirror/language";
@@ -29,10 +29,9 @@ const chordLanguage = StreamLanguage.define({
   }
 });
 
-// --- CAMBIO AQUÍ: Se corrige el error de tipo ---
 const chordHighlightStyle = HighlightStyle.define([
   { tag: tags.keyword, class: 'cm-chord' },
-  { tag: tags.string, class: 'cm-lyric' }, // Se usa tags.string en lugar de 'string'
+  { tag: tags.string, class: 'cm-lyric' },
 ]);
 
 const editorTheme = EditorView.theme({
@@ -50,38 +49,48 @@ const editorTheme = EditorView.theme({
 
 const findChordAtPosition = (tree: any, pos: number, docLength: number) => {
   let chordNode = tree.resolveInner(pos, 1);
-  
+
   if (chordNode.type.name !== 'chord') {
     for (let offset = 1; offset <= 4 && pos - offset >= 0; offset++) {
       const testNode = tree.resolveInner(pos - offset, 1);
       if (testNode.type.name === 'chord') {
-        if (pos <= testNode.to + 2) {
-          chordNode = testNode;
-          break;
-        }
+        if (pos <= testNode.to + 2) { chordNode = testNode; break; }
       }
     }
-    
+
     if (chordNode.type.name !== 'chord') {
       for (let offset = 1; offset <= 4 && pos + offset < docLength; offset++) {
         const testNode = tree.resolveInner(pos + offset, 1);
         if (testNode.type.name === 'chord') {
-          if (pos >= testNode.from - 2) {
-            chordNode = testNode;
-            break;
-          }
+          if (pos >= testNode.from - 2) { chordNode = testNode; break; }
         }
       }
     }
   }
-  
+
   return chordNode.type.name === 'chord' ? chordNode : null;
 };
 
+// ── Tipo compartido por los plugins (siempre leen del ref) ────────────────────
+interface PluginCallbacks {
+  audioEngine: AudioEngine;
+  showInspector: ShowInspectorFn;
+  onChordHover: (chord: SequenceItem | null) => void;
+  transpositionOffset: number;
+  onDocChange: (doc: string) => void;
+  onReharmonizeClick: (chord: SequenceItem, callback: (newChord: SequenceItem) => void, position: { x: number; y: number }) => void;
+  onReharmonizeSpaceClick: (lineIndex: number, charIndex: number, prevChord: SequenceItem | null, nextChord: SequenceItem | null, position: { x: number; y: number }) => void;
+}
 
-const chordInteractionPlugin = (audioEngine: AudioEngine, showInspector: ShowInspectorFn, transpositionOffset: number, longPressTimeoutRef: React.MutableRefObject<number | null>, clearLongPressTimeout: () => void, onChordHover: (chord: SequenceItem | null) => void, onReharmonizeClick: (chord: SequenceItem, callback: (newChord: SequenceItem) => void) => void, onReharmonizeSpaceClick: (lineIndex: number, charIndex: number, prevChord: SequenceItem | null, nextChord: SequenceItem | null) => void) => {
+// Los plugins leen cbRef.current, por lo que nunca necesitan recrearse
+const chordInteractionPlugin = (
+  cbRef: React.MutableRefObject<PluginCallbacks>,
+  longPressTimeoutRef: React.MutableRefObject<number | null>,
+  clearLongPressTimeout: () => void
+) => {
   return EditorView.domEventHandlers({
     mousedown(event, view) {
+      const cb = cbRef.current;
       const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
       if (pos === null) return;
 
@@ -90,56 +99,72 @@ const chordInteractionPlugin = (audioEngine: AudioEngine, showInspector: ShowIns
 
       if (chordNode) {
         clearLongPressTimeout();
-        
+
         const transposedChordText = view.state.sliceDoc(chordNode.from, chordNode.to);
         const parsedChord = parseChordString(transposedChordText);
-        
+
         if (parsedChord) {
-            onReharmonizeClick(parsedChord, (newChord) => {
-              const formatted = formatChordName(newChord, { style: 'short' });
-              view.dispatch({
-                changes: { from: chordNode.from, to: chordNode.to, insert: formatted }
-              });
-            });
-            audioEngine.playChord(parsedChord, 0); 
-            onChordHover(parsedChord);
+          cb.audioEngine.playChord(parsedChord, 0);
+          cb.onChordHover(parsedChord);
         } else {
-            onChordHover(null);
+          cb.onChordHover(null);
         }
 
         longPressTimeoutRef.current = window.setTimeout(() => {
-            if (longPressTimeoutRef.current !== null) {
-                longPressTimeoutRef.current = null;
-                
-                const transposedChordText = view.state.sliceDoc(chordNode.from, chordNode.to);
-                const parsedTransposedChord = parseChordString(transposedChordText);
-                if (!parsedTransposedChord) return;
-                
-                const originalChord = { ...parsedTransposedChord, id: Date.now() };
-                originalChord.rootNote = transposeNote(parsedTransposedChord.rootNote, -transpositionOffset);
-                if (parsedTransposedChord.bassNote) {
-                    originalChord.bassNote = transposeNote(parsedTransposedChord.bassNote, -transpositionOffset);
-                }
+          if (longPressTimeoutRef.current !== null) {
+            longPressTimeoutRef.current = null;
 
-                showInspector(originalChord, {
-                  onUpdate: (updatedItem: SequenceItem) => {
-                    const formatted = formatChordName(updatedItem, { style: 'short' });
-                    view.dispatch({
-                      changes: { from: chordNode.from, to: chordNode.to, insert: formatted }
-                    });
-                  },
-                  onDelete: () => {
-                    view.dispatch({
-                      changes: { from: chordNode.from, to: chordNode.to, insert: '' }
-                    });
-                  }
-                });
+            const text = view.state.sliceDoc(chordNode.from, chordNode.to);
+            const parsedTransposedChord = parseChordString(text);
+            if (!parsedTransposedChord) return;
+
+            const originalChord = { ...parsedTransposedChord, id: Date.now() };
+            originalChord.rootNote = transposeNote(parsedTransposedChord.rootNote, -cbRef.current.transpositionOffset);
+            if (parsedTransposedChord.bassNote) {
+              originalChord.bassNote = transposeNote(parsedTransposedChord.bassNote, -cbRef.current.transpositionOffset);
             }
+
+            cbRef.current.showInspector(originalChord, {
+              onUpdate: (updatedItem: SequenceItem) => {
+                const formatted = formatChordName(updatedItem, { style: 'short' });
+                view.dispatch({ changes: { from: chordNode.from, to: chordNode.to, insert: formatted } });
+              },
+              onDelete: () => {
+                view.dispatch({ changes: { from: chordNode.from, to: chordNode.to, insert: '' } });
+              }
+            });
+          }
         }, 700);
+      }
+    },
+
+    dblclick(event, view) {
+      const cb = cbRef.current;
+      event.preventDefault();
+      const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
+      if (pos === null) return;
+
+      const tree = syntaxTree(view.state);
+      const chordNode = findChordAtPosition(tree, pos, view.state.doc.length);
+
+      if (chordNode) {
+        const transposedChordText = view.state.sliceDoc(chordNode.from, chordNode.to);
+        const parsedChord = parseChordString(transposedChordText);
+
+        if (parsedChord) {
+          const coords = view.coordsAtPos(chordNode.from);
+          const popoverPos = coords
+            ? { x: coords.left, y: coords.bottom + 4 }
+            : { x: event.clientX, y: event.clientY + 20 };
+
+          cb.onReharmonizeClick(parsedChord, (newChord) => {
+            const formatted = formatChordName(newChord, { style: 'short' });
+            view.dispatch({ changes: { from: chordNode.from, to: chordNode.to, insert: formatted } });
+          }, popoverPos);
+        }
       } else {
-        // Click en un espacio vacío
         const line = view.state.doc.lineAt(pos);
-        const lineIndex = line.number - 1; // Convertir a índice base 0
+        const lineIndex = line.number - 1;
         const charIndex = pos - line.from;
 
         const lineChords: SequenceItem[] = [];
@@ -149,9 +174,9 @@ const chordInteractionPlugin = (audioEngine: AudioEngine, showInspector: ShowIns
           enter: (node) => {
             if (node.type.name === 'chord') {
               const chordText = view.state.sliceDoc(node.from, node.to);
-              const parsedChord = parseChordString(chordText);
-              if (parsedChord) {
-                lineChords.push({ ...parsedChord, id: Date.now(), raw: chordText, position: node.from - line.from });
+              const parsed = parseChordString(chordText);
+              if (parsed) {
+                lineChords.push({ ...parsed, id: Date.now(), raw: chordText, position: node.from - line.from });
               }
             }
           }
@@ -160,32 +185,31 @@ const chordInteractionPlugin = (audioEngine: AudioEngine, showInspector: ShowIns
         const prevChord = lineChords.filter(c => c.position! < charIndex).pop() || null;
         const nextChord = lineChords.find(c => c.position! >= charIndex) || null;
 
-        onReharmonizeSpaceClick(lineIndex, charIndex, prevChord, nextChord);
+        if (prevChord && nextChord) {
+          cb.onReharmonizeSpaceClick(lineIndex, charIndex, prevChord, nextChord, { x: event.clientX, y: event.clientY + 20 });
+        }
       }
     },
+
     mouseleave(_event, _view) {
-      if (longPressTimeoutRef.current) {
-        clearLongPressTimeout();
-      }
-      onChordHover(null);
+      clearLongPressTimeout();
+      cbRef.current.onChordHover(null);
     }
   });
 };
 
-const cursorChordDetector = (onChordHover: (chord: SequenceItem | null) => void) => {
+const cursorChordDetector = (cbRef: React.MutableRefObject<PluginCallbacks>) => {
   return EditorView.updateListener.of((update: ViewUpdate) => {
     if (!update.selectionSet) return;
-
     const pos = update.state.selection.main.head;
     const tree = syntaxTree(update.state);
     const chordNode = findChordAtPosition(tree, pos, update.state.doc.length);
 
     if (chordNode) {
-        const chordText = update.state.sliceDoc(chordNode.from, chordNode.to);
-        const parsedChord = parseChordString(chordText);
-        onChordHover(parsedChord);
+      const chordText = update.state.sliceDoc(chordNode.from, chordNode.to);
+      cbRef.current.onChordHover(parseChordString(chordText));
     } else {
-        onChordHover(null);
+      cbRef.current.onChordHover(null);
     }
   });
 };
@@ -197,8 +221,8 @@ interface SongEditorProps {
   onChordHover: (chord: SequenceItem | null) => void;
   transpositionOffset: number;
   onDocChange: (doc: string) => void;
-  onReharmonizeClick: (chord: SequenceItem, callback: (newChord: SequenceItem) => void) => void;
-  onReharmonizeSpaceClick: (lineIndex: number, charIndex: number, prevChord: SequenceItem | null, nextChord: SequenceItem | null) => void;
+  onReharmonizeClick: (chord: SequenceItem, callback: (newChord: SequenceItem) => void, position: { x: number; y: number }) => void;
+  onReharmonizeSpaceClick: (lineIndex: number, charIndex: number, prevChord: SequenceItem | null, nextChord: SequenceItem | null, position: { x: number; y: number }) => void;
 }
 
 const SongEditor: React.FC<SongEditorProps> = ({ initialDoc, audioEngine, showInspector, onChordHover, transpositionOffset, onDocChange, onReharmonizeClick, onReharmonizeSpaceClick }) => {
@@ -207,6 +231,10 @@ const SongEditor: React.FC<SongEditorProps> = ({ initialDoc, audioEngine, showIn
   const longPressTimeoutRef = useRef<number | null>(null);
   const initializedRef = useRef<boolean>(false);
   const isProgrammaticChangeRef = useRef(false);
+
+  // Ref que siempre tiene los callbacks más recientes — actualizado en cada render
+  const cbRef = useRef<PluginCallbacks>({ audioEngine, showInspector, onChordHover, transpositionOffset, onDocChange, onReharmonizeClick, onReharmonizeSpaceClick });
+  cbRef.current = { audioEngine, showInspector, onChordHover, transpositionOffset, onDocChange, onReharmonizeClick, onReharmonizeSpaceClick };
 
   const [untransposedDoc, setUntransposedDoc] = useState(initialDoc);
 
@@ -217,6 +245,7 @@ const SongEditor: React.FC<SongEditorProps> = ({ initialDoc, audioEngine, showIn
     }
   }, []);
 
+  // Inicialización del editor — se ejecuta una sola vez
   useEffect(() => {
     if (editorRef.current && !viewRef.current && !initializedRef.current) {
       const startState = EditorState.create({
@@ -225,13 +254,19 @@ const SongEditor: React.FC<SongEditorProps> = ({ initialDoc, audioEngine, showIn
           chordLanguage,
           syntaxHighlighting(chordHighlightStyle),
           editorTheme,
-          chordInteractionPlugin(audioEngine, showInspector, transpositionOffset, longPressTimeoutRef, clearLongPressTimeout, onChordHover, onReharmonizeClick, onReharmonizeSpaceClick),
-          cursorChordDetector(onChordHover),
+          chordInteractionPlugin(cbRef, longPressTimeoutRef, clearLongPressTimeout),
+          cursorChordDetector(cbRef),
+          EditorView.updateListener.of((update) => {
+            if (update.docChanged && !isProgrammaticChangeRef.current) {
+              const newDoc = update.state.doc.toString();
+              setUntransposedDoc(newDoc);
+              cbRef.current.onDocChange(newDoc);
+            }
+          }),
         ],
       });
 
-      const view = new EditorView({ state: startState, parent: editorRef.current });
-      viewRef.current = view;
+      viewRef.current = new EditorView({ state: startState, parent: editorRef.current });
       initializedRef.current = true;
     }
 
@@ -242,76 +277,45 @@ const SongEditor: React.FC<SongEditorProps> = ({ initialDoc, audioEngine, showIn
         initializedRef.current = false;
       }
     };
-  }, [initialDoc]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Sincroniza la vista con el doc transpuesto cuando cambia el offset
   useEffect(() => {
-    if (viewRef.current && initializedRef.current) {
-        const lines = untransposedDoc.split('\n');
+    if (!viewRef.current || !initializedRef.current) return;
 
-        const newDisplayedDoc = lines.map(line => {
-            if (line.trim().match(/^[A-G]/)) {
-                return line.replace(/\S+/g, (chordText) => {
-                    const parsedChord = parseChordString(chordText);
-                    if (parsedChord) {
-                        return formatChordName(parsedChord, { style: 'short' }, transpositionOffset);
-                    }
-                    return chordText;
-                });
-            }
-            return line;
-        }).join('\n');
-
-        if (viewRef.current.state.doc.toString() !== newDisplayedDoc) {
-            isProgrammaticChangeRef.current = true;
-            viewRef.current.dispatch({
-                changes: { from: 0, to: viewRef.current.state.doc.length, insert: newDisplayedDoc }
-            });
-            isProgrammaticChangeRef.current = false;
-        }
-    }
-  }, [transpositionOffset, untransposedDoc, viewRef, initializedRef]);
-  
-  useEffect(() => {
-    if (viewRef.current && initializedRef.current) {
-      const currentEditorDoc = viewRef.current.state.doc.toString();
-      if (initialDoc !== currentEditorDoc && untransposedDoc !== initialDoc) {
-        isProgrammaticChangeRef.current = true;
-        viewRef.current.dispatch({
-          changes: { from: 0, to: currentEditorDoc.length, insert: initialDoc }
+    const newDisplayedDoc = untransposedDoc.split('\n').map(line => {
+      if (chordLineRegex.test(line)) {
+        return line.replace(/\S+/g, (chordText) => {
+          const parsed = parseChordString(chordText);
+          return parsed ? formatChordName(parsed, { style: 'short' }, transpositionOffset) : chordText;
         });
-        isProgrammaticChangeRef.current = false;
-        setUntransposedDoc(initialDoc);
       }
-    }
-  }, [initialDoc, untransposedDoc, viewRef, initializedRef]);
+      return line;
+    }).join('\n');
 
-  useEffect(() => {
-    if (viewRef.current) {
-      viewRef.current.dispatch({
-        effects: StateEffect.reconfigure.of([
-          chordLanguage,
-          syntaxHighlighting(chordHighlightStyle),
-          editorTheme,
-          chordInteractionPlugin(audioEngine, showInspector, transpositionOffset, longPressTimeoutRef, clearLongPressTimeout, onChordHover, onReharmonizeClick, onReharmonizeSpaceClick),
-          cursorChordDetector(onChordHover),
-          EditorView.updateListener.of((update) => {
-            if (update.docChanged && !isProgrammaticChangeRef.current) {
-              const newDoc = update.state.doc.toString();
-              setUntransposedDoc(newDoc);
-              onDocChange(newDoc);
-            }
-          }),
-        ])
-      });
+    if (viewRef.current.state.doc.toString() !== newDisplayedDoc) {
+      isProgrammaticChangeRef.current = true;
+      viewRef.current.dispatch({ changes: { from: 0, to: viewRef.current.state.doc.length, insert: newDisplayedDoc } });
+      isProgrammaticChangeRef.current = false;
     }
-  }, [audioEngine, showInspector, onChordHover, transpositionOffset, clearLongPressTimeout, onDocChange]);
+  }, [transpositionOffset, untransposedDoc]);
 
+  // Sincroniza cuando el doc cambia externamente (importación)
   useEffect(() => {
-    const handleGlobalMouseUp = () => {
-      clearLongPressTimeout();
-    };
-    window.addEventListener('mouseup', handleGlobalMouseUp);
-    return () => window.removeEventListener('mouseup', handleGlobalMouseUp);
+    if (!viewRef.current || !initializedRef.current) return;
+    const currentEditorDoc = viewRef.current.state.doc.toString();
+    if (initialDoc !== currentEditorDoc && untransposedDoc !== initialDoc) {
+      isProgrammaticChangeRef.current = true;
+      viewRef.current.dispatch({ changes: { from: 0, to: currentEditorDoc.length, insert: initialDoc } });
+      isProgrammaticChangeRef.current = false;
+      setUntransposedDoc(initialDoc);
+    }
+  }, [initialDoc, untransposedDoc]);
+
+  // Cancela long-press si el botón se suelta fuera del editor
+  useEffect(() => {
+    window.addEventListener('mouseup', clearLongPressTimeout);
+    return () => window.removeEventListener('mouseup', clearLongPressTimeout);
   }, [clearLongPressTimeout]);
 
   return <div ref={editorRef} style={{ minHeight: '400px' }} />;

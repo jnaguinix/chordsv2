@@ -202,7 +202,7 @@ export function createSongSheet(
                 }
 
                 let clickTimer: number | null = null;
-                const longClickDuration = 500;
+                const longClickDuration = 700;
 
                 visualEl.addEventListener('mousedown', () => {
                     clickTimer = window.setTimeout(() => {
@@ -214,6 +214,7 @@ export function createSongSheet(
                 const clearTimer = () => {
                     if (clickTimer !== null) {
                         clearTimeout(clickTimer);
+                        clickTimer = null;
                     }
                 };
 

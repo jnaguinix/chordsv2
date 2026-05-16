@@ -40,12 +40,11 @@ export class TranspositionManager {
 
     /** Resetea la transposición a su estado original (0). */
     public reset(): void {
-        this.offset = 0;
-        // Llama al callback solo si el valor cambió, para evitar renders innecesarios.
-        if (this.displayElement.textContent !== 'Original') {
+        if (this.offset !== 0) {
+            this.offset = 0;
             this.onTransposeCallback();
+            this.updateDisplay();
         }
-        this.updateDisplay();
     }
 
     /** Actualiza el texto en el elemento HTML del display. */

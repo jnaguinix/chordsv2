@@ -17,7 +17,7 @@ const PianoDisplay: React.FC<PianoDisplayProps> = ({ chord, transpositionOffset 
     if (chord) {
       // El acorde que llega ya está listo para ser mostrado.
       // Se pasa un offset de 0 para que no se vuelva a transportar.
-      const { notesToPress, bassNoteIndex, allNotesForRange } = getChordNotes(chord, 0); 
+      const { notesToPress, bassNoteIndex, allNotesForRange } = getChordNotes(chord, transpositionOffset);
       if (allNotesForRange.length > 0) {
         const { startNote, endNote } = calculateOptimalPianoRange(allNotesForRange, 25, 4);
         createPiano(pianoRef.current, startNote, endNote, notesToPress, true, bassNoteIndex);

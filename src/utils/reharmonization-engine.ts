@@ -517,7 +517,7 @@ class IntelliHarmonixEngine {
         return suggestions;
     }
 
-    private getBackdoorPassing(prevChord: ChordAnalysis, nextChord: ChordAnalysis, key: DetectedKey): ChordSuggestion[] {
+    private getBackdoorPassing(_prevChord: ChordAnalysis, nextChord: ChordAnalysis, key: DetectedKey): ChordSuggestion[] {
         if (!nextChord.analysis) return [];
         const suggestions: ChordSuggestion[] = [];
         const keyRootIndex = NOTE_TO_INDEX[key.key];

@@ -88,6 +88,7 @@ export type ChordAnalysis = SequenceItem & {
  */
 export type ChordSuggestion = {
     chord: SequenceItem;
+    chords?: SequenceItem[]; // Opcional, usado cuando se sugiere un bloque de acordes (ej. ii-V-I)
     technique: string;   // ej. "Sustitución de Tritono"
     justification: string; // ej. "Crea una línea de bajo cromática."
 };

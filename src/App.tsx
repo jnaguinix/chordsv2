@@ -54,6 +54,7 @@ type AppState = {
   // Canción
   currentSongDoc: string;
   currentKey: DetectedKey;
+  currentMelodyNote?: string;
   // Sugerencias de rearmonización
   isSuggestionModalVisible: boolean;
   suggestions: ChordSuggestion[];
@@ -75,6 +76,7 @@ const initialState: AppState = {
   transpositionOffset: 0,
   currentSongDoc: (() => { try { return localStorage.getItem(STORAGE_KEY) ?? sampleSong; } catch { return sampleSong; } })(),
   currentKey: { key: 'C', scale: 'Major' },
+  currentMelodyNote: undefined,
   isSuggestionModalVisible: false,
   suggestions: [],
   insertionContext: null,
@@ -92,6 +94,7 @@ type AppAction =
   | { type: 'SET_TRANSPOSITION_OFFSET'; payload: number }
   | { type: 'SET_SONG_DOC'; payload: string }
   | { type: 'SET_KEY'; payload: DetectedKey }
+  | { type: 'SET_MELODY_NOTE'; payload: string | undefined }
   | { type: 'SHOW_SUGGESTIONS'; payload: { suggestions: ChordSuggestion[]; insertionContext: InsertionContext | null; position: { x: number; y: number } } }
   | { type: 'HIDE_SUGGESTIONS' }
   | { type: 'IMPORT_SONG'; payload: { songContent: string; key?: DetectedKey } }
@@ -118,6 +121,8 @@ function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, currentSongDoc: action.payload };
     case 'SET_KEY':
       return { ...state, currentKey: action.payload };
+    case 'SET_MELODY_NOTE':
+      return { ...state, currentMelodyNote: action.payload };
     case 'SHOW_SUGGESTIONS':
       return {
         ...state,
@@ -311,13 +316,13 @@ function App() {
 
   const handleReharmonizeClick = (chord: SequenceItem, callback: (newChord: SequenceItem) => void, position: { x: number; y: number }) => {
     chordToReharmonizeRef.current = { chord, callback };
-    const suggestions = IntelliHarmonix.getSuggestionsForChord(chord, state.currentKey, undefined, state.reharmonizationSettings);
+    const suggestions = IntelliHarmonix.getSuggestionsForChord(chord, state.currentKey, undefined, state.reharmonizationSettings, state.currentMelodyNote);
     dispatch({ type: 'SHOW_SUGGESTIONS', payload: { suggestions, insertionContext: null, position } });
   };
 
   const handleReharmonizeSpaceClick = (_lineIndex: number, charIndex: number, prevChord: SequenceItem | null, nextChord: SequenceItem | null, position: { x: number; y: number }) => {
     chordToReharmonizeRef.current = null;
-    const suggestions = IntelliHarmonix.getPassingChordSuggestions(prevChord!, nextChord!, state.currentKey, state.reharmonizationSettings);
+    const suggestions = IntelliHarmonix.getPassingChordSuggestions(prevChord!, nextChord!, state.currentKey, state.reharmonizationSettings, state.currentMelodyNote);
     dispatch({
       type: 'SHOW_SUGGESTIONS',
       payload: {
@@ -328,10 +333,10 @@ function App() {
     });
   };
 
-  const handleSuggestionClick = (suggestedChord: SequenceItem) => {
+  const handleSuggestionClick = (suggestion: ChordSuggestion) => {
     if (chordToReharmonizeRef.current) {
       // Caso: Reemplazar un acorde existente
-      chordToReharmonizeRef.current.callback(suggestedChord);
+      chordToReharmonizeRef.current.callback(suggestion.chord);
     } else if (state.insertionContext) {
       // Caso: Insertar un acorde de paso
       const { lineIndex, charIndex } = state.insertionContext;
@@ -339,7 +344,10 @@ function App() {
       const targetLine = currentDocLines[lineIndex];
 
       if (targetLine !== undefined) {
-        const baseChordText = formatChordName(suggestedChord, { style: 'short' });
+        // Soporte para bloques de acordes (Gap 2)
+        const baseChordText = suggestion.chords 
+          ? suggestion.chords.map(c => formatChordName(c, { style: 'short' })).join(' ')
+          : formatChordName(suggestion.chord, { style: 'short' });
         
         let availableSpaces = 0;
         for (let k = charIndex; k < targetLine.length; k++) {
@@ -483,6 +491,21 @@ function App() {
                             <option key={`${k.key}-${k.scale}`} value={`${k.key}-${k.scale}`}>
                                 {k.key} {k.scale}
                             </option>
+                        ))}
+                    </select>
+                </div>
+                <div className="ctrl-divider"></div>
+                <div className="selector-inline">
+                    <select
+                        id="melody-note-select"
+                        value={state.currentMelodyNote || ''}
+                        onChange={(e) => dispatch({ type: 'SET_MELODY_NOTE', payload: e.target.value || undefined })}
+                        className="ctrl-select"
+                        title="Nota de Melodía"
+                    >
+                        <option value="">Melodía: Ninguna</option>
+                        {['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'].map(note => (
+                            <option key={note} value={note}>Melodía: {note}</option>
                         ))}
                     </select>
                 </div>

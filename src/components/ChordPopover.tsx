@@ -7,7 +7,7 @@ interface ChordPopoverProps {
   isVisible: boolean;
   onClose: () => void;
   suggestions: ChordSuggestion[];
-  onSuggestionClick: (chord: SequenceItem) => void;
+  onSuggestionClick: (suggestion: ChordSuggestion) => void;
   activeChord: SequenceItem | null;
   position: { x: number; y: number };
   audioEngine: AudioEngine | null;
@@ -101,11 +101,13 @@ const ChordPopover: React.FC<ChordPopoverProps> = ({
               <li
                 key={i}
                 className="chord-popover-item"
-                onClick={() => onSuggestionClick(s.chord)}
+                onClick={() => onSuggestionClick(s)} // PASAMOS LA SUGERENCIA COMPLETA AHORA
                 onMouseEnter={() => handleSuggestionHover(s.chord)}
               >
                 <span className="chord-popover-chord">
-                  {formatChordName(s.chord, { style: 'short' })}
+                  {s.chords 
+                    ? s.chords.map(c => formatChordName(c, { style: 'short' })).join(' - ')
+                    : formatChordName(s.chord, { style: 'short' })}
                 </span>
                 <span className="chord-popover-technique">{s.technique}</span>
               </li>

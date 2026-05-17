@@ -12,7 +12,7 @@ import { TranspositionManager } from './utils/transposition-manager';
 import { IntelliHarmonix } from './utils/reharmonization-engine'; // Importar el motor
 import { INDEX_TO_SHARP_NAME } from './utils/constants';
 import { formatChordName } from './utils/chord-utils'; // Importar formatChordName
-import type { SequenceItem, InspectorCallbacks, ShowInspectorFn, DetectedKey, ChordSuggestion } from './types';
+import type { SequenceItem, InspectorCallbacks, ShowInspectorFn, DetectedKey, ChordSuggestion, ReharmonizationSettings, StyleVocabulary, HarmonicDensity } from './types';
 import './App.css';
 
 const sampleSong = `
@@ -61,6 +61,7 @@ type AppState = {
   popoverPosition: { x: number; y: number };
   // Notificaciones
   toast: { message: string; type: 'success' | 'error' } | null;
+  reharmonizationSettings: ReharmonizationSettings;
 };
 
 const STORAGE_KEY = 'chords_song_doc';
@@ -79,6 +80,7 @@ const initialState: AppState = {
   insertionContext: null,
   popoverPosition: { x: 0, y: 0 },
   toast: null,
+  reharmonizationSettings: { style: 'jazz', density: 'medium' },
 };
 
 type AppAction =
@@ -94,7 +96,8 @@ type AppAction =
   | { type: 'HIDE_SUGGESTIONS' }
   | { type: 'IMPORT_SONG'; payload: { songContent: string; key?: DetectedKey } }
   | { type: 'SHOW_TOAST'; payload: { message: string; type: 'success' | 'error' } }
-  | { type: 'HIDE_TOAST' };
+  | { type: 'HIDE_TOAST' }
+  | { type: 'SET_REHARMONIZATION_SETTINGS'; payload: Partial<ReharmonizationSettings> };
 
 function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
@@ -141,6 +144,8 @@ function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, toast: action.payload };
     case 'HIDE_TOAST':
       return { ...state, toast: null };
+    case 'SET_REHARMONIZATION_SETTINGS':
+      return { ...state, reharmonizationSettings: { ...state.reharmonizationSettings, ...action.payload } };
     default:
       return state;
   }
@@ -296,15 +301,23 @@ function App() {
     dispatch({ type: 'SET_KEY', payload: { key, scale: scale as 'Major' | 'Minor' } });
   };
 
+  const handleStyleChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    dispatch({ type: 'SET_REHARMONIZATION_SETTINGS', payload: { style: event.target.value as StyleVocabulary } });
+  };
+
+  const handleDensityChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    dispatch({ type: 'SET_REHARMONIZATION_SETTINGS', payload: { density: event.target.value as HarmonicDensity } });
+  };
+
   const handleReharmonizeClick = (chord: SequenceItem, callback: (newChord: SequenceItem) => void, position: { x: number; y: number }) => {
     chordToReharmonizeRef.current = { chord, callback };
-    const suggestions = IntelliHarmonix.getSuggestionsForChord(chord, state.currentKey);
+    const suggestions = IntelliHarmonix.getSuggestionsForChord(chord, state.currentKey, undefined, state.reharmonizationSettings);
     dispatch({ type: 'SHOW_SUGGESTIONS', payload: { suggestions, insertionContext: null, position } });
   };
 
   const handleReharmonizeSpaceClick = (_lineIndex: number, charIndex: number, prevChord: SequenceItem | null, nextChord: SequenceItem | null, position: { x: number; y: number }) => {
     chordToReharmonizeRef.current = null;
-    const suggestions = IntelliHarmonix.getPassingChordSuggestions(prevChord!, nextChord!, state.currentKey);
+    const suggestions = IntelliHarmonix.getPassingChordSuggestions(prevChord!, nextChord!, state.currentKey, state.reharmonizationSettings);
     dispatch({
       type: 'SHOW_SUGGESTIONS',
       payload: {
@@ -326,33 +339,42 @@ function App() {
       const targetLine = currentDocLines[lineIndex];
 
       if (targetLine !== undefined) {
-        const newChordText = formatChordName(suggestedChord, { style: 'short' });
-        const chordLen = newChordText.length;
+        const baseChordText = formatChordName(suggestedChord, { style: 'short' });
         
-        // Sobreescribir espacios en la posición, sin desplazar los acordes existentes.
-        // Buscamos cuántos espacios hay disponibles en la posición para sobreescribir.
         let availableSpaces = 0;
         for (let k = charIndex; k < targetLine.length; k++) {
           if (targetLine[k] === ' ') availableSpaces++;
           else break;
         }
 
+        // Asegurar que el nuevo acorde tenga al menos 1 espacio de separación si toca a un vecino
+        let insertion = baseChordText;
+        if (charIndex === 0 || targetLine[charIndex - 1] !== ' ') {
+          insertion = ' ' + insertion;
+        }
+        if (charIndex + availableSpaces >= targetLine.length || targetLine[charIndex + availableSpaces] !== ' ') {
+          insertion = insertion + ' ';
+        }
+
+        const chordLen = insertion.length;
+
         let newLine: string;
+        let netShift = 0;
         if (availableSpaces >= chordLen) {
           // Hay suficientes espacios: sobreescribimos exactamente los que necesitamos
-          newLine = targetLine.slice(0, charIndex) + newChordText + targetLine.slice(charIndex + chordLen);
+          newLine = targetLine.slice(0, charIndex) + insertion + targetLine.slice(charIndex + chordLen);
         } else if (availableSpaces >= chordLen - 1) {
-          // Casi suficientes: dejamos sin espacio de padding (aceptable)
-          newLine = targetLine.slice(0, charIndex) + newChordText + targetLine.slice(charIndex + availableSpaces);
+          // Casi suficientes
+          newLine = targetLine.slice(0, charIndex) + insertion + targetLine.slice(charIndex + availableSpaces);
         } else {
           // No hay suficiente espacio: insertamos pero tratamos de minimizar el desplazamiento
-          // Sobreescribimos los espacios que haya y solo agregamos los caracteres que faltan
           const overflow = chordLen - availableSpaces;
-          newLine = targetLine.slice(0, charIndex) + newChordText + targetLine.slice(charIndex + availableSpaces);
+          newLine = targetLine.slice(0, charIndex) + insertion + targetLine.slice(charIndex + availableSpaces);
+          
           // Compensar: quitar espacios sobrantes después del acorde insertado si los hay
           const afterInsert = charIndex + chordLen;
+          let spacesToRemove = 0;
           if (afterInsert < newLine.length) {
-            let spacesToRemove = 0;
             for (let k = afterInsert; k < newLine.length && spacesToRemove < overflow; k++) {
               if (newLine[k] === ' ') spacesToRemove++;
               else break;
@@ -361,9 +383,25 @@ function App() {
               newLine = newLine.slice(0, afterInsert) + newLine.slice(afterInsert + spacesToRemove);
             }
           }
+          netShift = overflow - spacesToRemove;
         }
         
         currentDocLines[lineIndex] = newLine;
+
+        // --- OPCIÓN 1: DESPLAZAMIENTO SINCRONIZADO DE LA LETRA ---
+        if (netShift > 0 && lineIndex + 1 < currentDocLines.length) {
+          const nextLine = currentDocLines[lineIndex + 1];
+          // Validar de forma sencilla si es una línea de acordes o letra (si tiene minúsculas, suele ser letra)
+          const isProbablyLyric = /[a-zñáéíóú]/i.test(nextLine) && !/^(\s*[A-G](b|#)?[a-zA-Z0-9#b()]*(\/[A-G](b|#)?)?\s*)*$/.test(nextLine);
+          
+          if (isProbablyLyric) {
+            const insertPos = Math.min(charIndex + availableSpaces, nextLine.length);
+            const padding = ' '.repeat(netShift);
+            const paddedNextLine = nextLine.padEnd(insertPos, ' ');
+            currentDocLines[lineIndex + 1] = paddedNextLine.slice(0, insertPos) + padding + paddedNextLine.slice(insertPos);
+          }
+        }
+
         dispatch({ type: 'SET_SONG_DOC', payload: currentDocLines.join('\n') });
       }
     }
@@ -446,6 +484,34 @@ function App() {
                                 {k.key} {k.scale}
                             </option>
                         ))}
+                    </select>
+                </div>
+                <div className="ctrl-divider"></div>
+                <div className="selector-inline">
+                    <select
+                        id="style-select"
+                        value={state.reharmonizationSettings.style}
+                        onChange={handleStyleChange}
+                        className="ctrl-select"
+                        title="Estilo"
+                    >
+                        <option value="jazz">Jazz</option>
+                        <option value="gospel">Gospel</option>
+                        <option value="neo-soul">Neo-Soul</option>
+                        <option value="bolero">Bolero</option>
+                    </select>
+                </div>
+                <div className="selector-inline">
+                    <select
+                        id="density-select"
+                        value={state.reharmonizationSettings.density}
+                        onChange={handleDensityChange}
+                        className="ctrl-select"
+                        title="Densidad Armónica"
+                    >
+                        <option value="low">Baja</option>
+                        <option value="medium">Media</option>
+                        <option value="high">Alta</option>
                     </select>
                 </div>
               </div>

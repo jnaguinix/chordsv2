@@ -95,10 +95,10 @@ export type ChordSuggestion = {
 /**
  * Define la estructura de los ajustes para la rearmonización global.
  */
+export type StyleVocabulary = 'jazz' | 'gospel' | 'neo-soul' | 'bolero';
+export type HarmonicDensity = 'low' | 'medium' | 'high';
+
 export type ReharmonizationSettings = {
-    jazz: number;       // 0-100
-    gospel: number;     // 0-100
-    neoSoul: number;    // 0-100
-    lofi: number;       // 0-100
-    complexity: number; // 0-100
+    style: StyleVocabulary;
+    density: HarmonicDensity;
 };

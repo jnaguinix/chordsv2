@@ -14,30 +14,21 @@ import { transposeNote, parseChordString, formatChordName, getChordNotes } from 
 
 const MAJOR_SCALE_INTERVALS = [0, 2, 4, 5, 7, 9, 11];
 const MINOR_SCALE_INTERVALS = [0, 2, 3, 5, 7, 8, 10];
-// Escala menor armónica: 7mo grado elevado → V mayor (dominante real)
 const HARMONIC_MINOR_SCALE_INTERVALS = [0, 2, 3, 5, 7, 8, 11];
 
 const MAJOR_SCALE_DEGREES = ['I', 'ii', 'iii', 'IV', 'V', 'vi', 'vii°'];
 const MINOR_SCALE_DEGREES = ['i', 'ii°', 'bIII', 'iv', 'v', 'bVI', 'bVII'];
-// En menor armónica: V es mayor (dominante funcional) y vii° es disminuido
 const HARMONIC_MINOR_DEGREES = ['i', 'ii°', 'bIII+', 'iv', 'V', 'bVI', 'vii°'];
 
-// Helper: Determina si un tipo de acorde pertenece a la familia "menor"
-// (Menor, m7, m9, m11, m(maj7), m6, m7b5, madd9, etc.)
 const MINOR_FAMILY_IDS = new Set(['Menor', 'm7', 'm9', 'm11', 'm(maj7)', 'm6', 'm7b5', 'madd9']);
 const isMinorFamily = (type: string): boolean => MINOR_FAMILY_IDS.has(type);
 
-// Helper: Determina si un tipo de acorde es dominante (contiene 7ª menor + 3ra mayor)
-const DOMINANT_FAMILY_IDS = new Set(['7', '9', '13', '11', '7b9', '7#9', '7sus4', '7sus2', '9sus4', '7#5', '7#11']);
+const DOMINANT_FAMILY_IDS = new Set(['7', '9', '13', '11', '7b9', '7#9', '7sus4', '7sus2', '9sus4', '7#5', '7#11', '7alt']);
 const isDominantFamily = (type: string): boolean => DOMINANT_FAMILY_IDS.has(type);
 
-// Helper: Determina si un tipo de acorde es de la familia "mayor" (3ra mayor, sin 7ª menor)
 const MAJOR_FAMILY_IDS = new Set(['Mayor', 'maj7', 'maj9', '6', '6/9', 'maj7#11', 'add9']);
 const isMajorFamily = (type: string): boolean => MAJOR_FAMILY_IDS.has(type);
 
-// ========================================================================
-// REFINAMIENTO PRINCIPAL: La función `analyzeChordContext` ahora es mucho más inteligente.
-// ========================================================================
 function analyzeChordContext(chord: SequenceItem, detectedKey: DetectedKey): ChordAnalysis | null {
     if (!chord || !chord.rootNote) return null;
     const rootIndex = NOTE_TO_INDEX[chord.rootNote];
@@ -49,21 +40,18 @@ function analyzeChordContext(chord: SequenceItem, detectedKey: DetectedKey): Cho
     let degreeInfo: { degree: string, roman: string } | null = null;
     const isMajorKey = detectedKey.scale === 'Major';
 
-    // Extrae el grado base del numeral romano (ej. 'bVII7' → 'bVII', 'V7/ii' → 'V')
     const getBaseRoman = (roman: string): string => {
         return roman.replace(/(maj7|7|\+|°).*$/, '').split('/')[0];
     };
 
     const getFunction = (roman: string): 'Tonic' | 'Subdominant' | 'Dominant' | 'Transition' => {
         const base = getBaseRoman(roman);
-        // v (menor natural) se clasifica como Tónica — no tiene tritono, no es dominante funcional
         if (['I', 'vi', 'i', 'bIII', 'bVI', 'v'].includes(base)) return 'Tonic';
         if (['IV', 'ii', 'iv', 'ii°'].includes(base)) return 'Subdominant';
         if (['V', 'vii°', 'bVII'].includes(base)) return 'Dominant';
         return 'Transition';
     };
 
-    // Paso 1: Búsqueda de Grado Diatónico (el caso más común)
     const scaleIntervals = isMajorKey ? MAJOR_SCALE_INTERVALS : MINOR_SCALE_INTERVALS;
     const scaleDegrees = isMajorKey ? MAJOR_SCALE_DEGREES : MINOR_SCALE_DEGREES;
     const degreeIndex = scaleIntervals.indexOf(interval);
@@ -71,9 +59,6 @@ function analyzeChordContext(chord: SequenceItem, detectedKey: DetectedKey): Cho
     if (degreeIndex !== -1) {
         degreeInfo = { degree: (degreeIndex + 1).toString(), roman: scaleDegrees[degreeIndex] };
     } else {
-        // Si no es diatónico, empieza la búsqueda avanzada.
-
-        // Paso 1.5: En menor, verificar si es un V mayor (escala armónica)
         if (!isMajorKey) {
             const harmonicDegreeIndex = HARMONIC_MINOR_SCALE_INTERVALS.indexOf(interval);
             if (harmonicDegreeIndex !== -1 && HARMONIC_MINOR_DEGREES[harmonicDegreeIndex] !== MINOR_SCALE_DEGREES[harmonicDegreeIndex]) {
@@ -81,13 +66,12 @@ function analyzeChordContext(chord: SequenceItem, detectedKey: DetectedKey): Cho
             }
         }
 
-        // Paso 2: Búsqueda de Acordes de Intercambio Modal (si estamos en tonalidad Mayor)
         if (!degreeInfo && isMajorKey) {
             const modalInterchangeMap: { [interval: number]: { roman: string, check?: 'minor' | 'dominant' | 'major' } } = {
-                3: { roman: 'bIII', check: 'major' },     // ej. Eb, Ebmaj7 en C Mayor (debe ser mayor)
-                5: { roman: 'iv', check: 'minor' },       // ej. Fm, Fm7, Fm9 en C Mayor
-                8: { roman: 'bVI', check: 'major' },       // ej. Ab, Abmaj7 en C Mayor (debe ser mayor)
-                10: { roman: 'bVII', check: 'dominant' }   // ej. Bb, Bb7 en C Mayor (mayor o dominante)
+                3: { roman: 'bIII', check: 'major' },
+                5: { roman: 'iv', check: 'minor' },
+                8: { roman: 'bVI', check: 'major' },
+                10: { roman: 'bVII', check: 'dominant' }
             };
             const foundInterchange = modalInterchangeMap[interval];
             if (foundInterchange) {
@@ -101,7 +85,6 @@ function analyzeChordContext(chord: SequenceItem, detectedKey: DetectedKey): Cho
             }
         }
 
-        // Paso 3: Búsqueda de Dominantes Secundarios (si aún no se ha encontrado)
         if (!degreeInfo && isDominantFamily(chord.type)) {
             for (let i = 0; i < scaleIntervals.length; i++) {
                 const diatonicRoot = (keyRootIndex + scaleIntervals[i]) % 12;
@@ -125,7 +108,6 @@ function analyzeChordContext(chord: SequenceItem, detectedKey: DetectedKey): Cho
         };
     }
     
-    // Si después de todas las búsquedas no se encuentra, se marca como no analizado.
     return { ...chord, analysis: null };
 }
 
@@ -137,7 +119,7 @@ class IntelliHarmonixEngine {
         return intervals.includes(intervalInSemitones);
     }
 
-    private getDiatonicSubstitutions(chord: ChordAnalysis, key: DetectedKey): ChordSuggestion[] {
+    private getDiatonicSubstitutions(chord: ChordAnalysis, key: DetectedKey, _settings: ReharmonizationSettings): ChordSuggestion[] {
         if (!chord.analysis) return [];
         const suggestions: ChordSuggestion[] = [];
         const { func, roman } = chord.analysis;
@@ -179,32 +161,51 @@ class IntelliHarmonixEngine {
         return suggestions;
     }
 
-    private getSecondaryDominants(nextChord: ChordAnalysis): ChordSuggestion[] {
+    private getSecondaryDominants(nextChord: ChordAnalysis, settings: ReharmonizationSettings): ChordSuggestion[] {
         if (!nextChord.analysis || ['I', 'i', 'vii°'].includes(nextChord.analysis.roman)) return [];
         
         const targetRootIndex = NOTE_TO_INDEX[nextChord.rootNote];
         if (targetRootIndex === undefined) return [];
 
         const dominantRoot = transposeNote(INDEX_TO_SHARP_NAME[targetRootIndex], 7);
-        const dominantChord = parseChordString(`${dominantRoot}7`);
+        
+        // Gap 1: Dominantes secundarios planos
+        let dominantType = '7';
+        const isTargetMinor = isMinorFamily(nextChord.type);
+        
+        if (settings.style === 'bolero') {
+            dominantType = '7b9'; 
+        } else if (settings.style === 'jazz' || settings.style === 'neo-soul') {
+            if (settings.density === 'high') {
+                dominantType = isTargetMinor ? '7alt' : '13';
+            } else {
+                dominantType = isTargetMinor ? '7b9' : '9';
+            }
+        } else {
+            // Gospel
+            dominantType = isTargetMinor ? '7b9#5' : '9';
+        }
+
+        const dominantChord = parseChordString(`${dominantRoot}${dominantType}`);
 
         if (dominantChord) {
             return [{
                 chord: dominantChord,
                 technique: 'Dominante Secundario',
-                justification: `Prepara el acorde ${formatChordName(nextChord, { style: 'short' })}`
+                justification: `Prepara el acorde destino (${dominantType} para estilo ${settings.style}).`
             }];
         }
         return [];
     }
 
-    private getTritoneSubstitution(chord: ChordAnalysis): ChordSuggestion[] {
+    private getTritoneSubstitution(chord: ChordAnalysis, settings: ReharmonizationSettings): ChordSuggestion[] {
         if (!this.chordHasInterval(chord, 10)) return [];
         if (!this.chordHasInterval(chord, 4)) return [];
         if (!chord.analysis || chord.analysis.func !== 'Dominant') return [];
 
         const tritoneRoot = transposeNote(chord.rootNote, 6);
-        const tritoneChord = parseChordString(`${tritoneRoot}7`);
+        const tritoneType = settings.style === 'jazz' || settings.style === 'neo-soul' ? '7alt' : '7';
+        const tritoneChord = parseChordString(`${tritoneRoot}${tritoneType}`);
 
         if (tritoneChord) {
             return [{
@@ -216,7 +217,7 @@ class IntelliHarmonixEngine {
         return [];
     }
     
-    private getModalInterchange(chord: ChordAnalysis, key: DetectedKey): ChordSuggestion[] {
+    private getModalInterchange(chord: ChordAnalysis, key: DetectedKey, _settings: ReharmonizationSettings): ChordSuggestion[] {
         if (!chord.analysis || key.scale !== 'Major') return [];
         const suggestions: ChordSuggestion[] = [];
         const { roman } = chord.analysis;
@@ -258,13 +259,11 @@ class IntelliHarmonixEngine {
     }
 
 
-    private getStyledVoicings(chord: ChordAnalysis): ChordSuggestion[] {
+    private getStyledVoicings(chord: ChordAnalysis, _settings: ReharmonizationSettings): ChordSuggestion[] {
         if (!chord.analysis) return [];
         const suggestions: ChordSuggestion[] = [];
         const { roman } = chord.analysis;
 
-        // No sugerir maj7 en el grado V — destruye la función dominante.
-        // Solo I, IV (y sustitutos iii, vi, bIII, bVI) reciben maj7.
         const dominantDegrees = ['V', 'vii°'];
         const isOnDominantDegree = dominantDegrees.includes(roman);
 
@@ -279,7 +278,6 @@ class IntelliHarmonixEngine {
             }
         }
 
-        // En el grado V, sugerir 7 dominante en vez de maj7
         if (chord.type === 'Mayor' && roman === 'V' && !this.chordHasInterval(chord, 10)) {
             const newChord = parseChordString(`${chord.rootNote}7`);
             if (newChord) {
@@ -292,7 +290,6 @@ class IntelliHarmonixEngine {
         }
 
         if (chord.type === 'Menor' && !this.chordHasInterval(chord, 10)) {
-            // En vii°, sugerir m7b5 (semidisminuido) en vez de m7
             if (roman === 'vii°') {
                 const newChord = parseChordString(`${chord.rootNote}m7b5`);
                 if (newChord) {
@@ -317,101 +314,202 @@ class IntelliHarmonixEngine {
         return suggestions;
     }
 
-    private addExtensions(chord: ChordAnalysis, key: DetectedKey): ChordSuggestion[] {
+    private addExtensions(chord: ChordAnalysis, _key: DetectedKey, settings: ReharmonizationSettings): ChordSuggestion[] {
         const suggestions: ChordSuggestion[] = [];
-        const { notesToPress } = getChordNotes(chord);
-        if (notesToPress.length === 0) return [];
+        if (settings.density === 'low') return suggestions;
 
-        const rootMidi = NOTE_TO_INDEX[chord.rootNote];
-        if (rootMidi === undefined) return [];
+        const { func } = chord.analysis || {};
+        const isTonic = func === 'Tonic';
+        const isDominant = func === 'Dominant';
+        const isMinor = isMinorFamily(chord.type);
+        const isMajor = isMajorFamily(chord.type);
         
-        const intervals = new Set(notesToPress.map(note => (note - rootMidi + 12) % 12));
-
-        if (intervals.has(11) && intervals.has(4) && !intervals.has(3)) {
-            const newChord = parseChordString(`${chord.rootNote}maj9`);
-            if (newChord) {
-                suggestions.push({
-                    chord: newChord,
-                    technique: 'Extensión de Acorde',
-                    justification: 'Añade la 9na para un sonido más sofisticado (maj9).'
-                });
+        // Gap 2: Extensiones sin contexto funcional - solucionado con estilo y densidad
+        if (isMinor) {
+            if (settings.style === 'gospel' && isTonic) {
+                const c1 = parseChordString(`${chord.rootNote}m(maj7)`);
+                if (c1) suggestions.push({ chord: c1, technique: 'Gospel Minor', justification: 'Tónica menor gospel dramática' });
+                if (settings.density === 'high') {
+                    const c2 = parseChordString(`${chord.rootNote}m9(maj7)`);
+                    if (c2) suggestions.push({ chord: c2, technique: 'Gospel Minor', justification: 'Tónica menor gospel densa' });
+                }
+            } else if (settings.style === 'bolero') {
+                const c1 = parseChordString(`${chord.rootNote}m9`);
+                if (c1) suggestions.push({ chord: c1, technique: 'Bolero Minor', justification: 'Extensión suave' });
+            } else {
+                const targetExt = settings.density === 'high' ? 'm13' : (settings.density === 'medium' ? 'm11' : 'm9');
+                const c1 = parseChordString(`${chord.rootNote}${targetExt}`);
+                if (c1) suggestions.push({ chord: c1, technique: 'Extensión Diatónica', justification: `Escalonado por intensidad: ${targetExt}` });
             }
+        } else if (isMajor && isTonic) {
+            if (settings.style === 'bolero') {
+                const c1 = parseChordString(`${chord.rootNote}6/9`);
+                if (c1) suggestions.push({ chord: c1, technique: 'Bolero Tonic', justification: 'Tónica suave 6/9 en vez de maj7' });
+                const c2 = parseChordString(`${chord.rootNote}maj9`);
+                if (c2) suggestions.push({ chord: c2, technique: 'Bolero Tonic', justification: 'Extensión 9na suave' });
+            } else if (settings.style === 'neo-soul') {
+                const c1 = parseChordString(`${chord.rootNote}maj7#11`);
+                if (c1) suggestions.push({ chord: c1, technique: 'Neo-Soul Tonic', justification: 'Color lidio característico' });
+                const c2 = parseChordString(`${chord.rootNote}maj9`);
+                if (c2) suggestions.push({ chord: c2, technique: 'Neo-Soul Tonic', justification: 'Extensión 9na' });
+            } else {
+                const c1 = parseChordString(`${chord.rootNote}maj9`);
+                if (c1) suggestions.push({ chord: c1, technique: 'Extensión Major', justification: 'Tónica con 9na' });
+            }
+        } else if (isDominant) {
+            let ext = '9';
+            if (settings.style === 'jazz' || settings.style === 'neo-soul') {
+                ext = settings.density === 'high' ? '7alt' : '13';
+            } else if (settings.style === 'bolero') {
+                ext = '7b9';
+            } else {
+                ext = '13';
+            }
+            const c1 = parseChordString(`${chord.rootNote}${ext}`);
+            if (c1) suggestions.push({ chord: c1, technique: 'Dominante Extendido', justification: `Tensión ${ext} propia del estilo` });
+        }
+        
+        return suggestions;
+    }
+
+    private getCommonToneSubstitutions(chord: ChordAnalysis, key: DetectedKey, settings: ReharmonizationSettings): ChordSuggestion[] {
+        const suggestions: ChordSuggestion[] = [];
+        if (settings.density === 'low') return [];
+
+        const refNotes = getChordNotes(chord);
+        if (refNotes.notesToPress.length === 0) return [];
+        const refPitchClasses = new Set(refNotes.notesToPress.map(n => n % 12));
+
+        // Gap 3: Sustitución por nota común
+        if (chord.analysis?.roman === 'I' && key.scale === 'Major') {
+            const thirdRoot = transposeNote(chord.rootNote, 4); 
+            const sixthRoot = transposeNote(chord.rootNote, 9); 
+            const c1 = parseChordString(`${thirdRoot}m7`);
+            if (c1) suggestions.push({ chord: c1, technique: 'Expansión de Tónica', justification: 'Construido en la 3ra del I' });
+            const c2 = parseChordString(`${sixthRoot}m7`);
+            if (c2) suggestions.push({ chord: c2, technique: 'Expansión de Tónica', justification: 'Construido en la 6ta del I' });
         }
 
-        if (intervals.has(10)) {
-            // Acorde con 7ª menor
-            if (intervals.has(3) || intervals.has(4)) {
-                // Es menor (tiene b3)
-                if (intervals.has(3)) {
-                    if (chord.analysis?.roman === 'iii' && key.scale === 'Major') {
-                        const newChord = parseChordString(`${chord.rootNote}m9`);
-                        if (newChord) {
-                            suggestions.push({
-                                chord: newChord,
-                                technique: 'Extensión de Acorde',
-                                justification: 'Añade la 9na mayor (diatónica) apropiada para el iii grado.'
-                            });
-                        }
-                    } else {
-                        const newChord = parseChordString(`${chord.rootNote}m9`);
-                        if (newChord) {
-                            suggestions.push({
-                                chord: newChord,
-                                technique: 'Extensión de Acorde',
-                                justification: 'Añade la 9na para un color Neo-Soul/Jazz (m9).'
-                            });
-                        }
-                    }
-                }
-                // Es dominante (tiene 3 mayor + b7) → sugerir 9 dominante
-                if (intervals.has(4) && !intervals.has(3)) {
-                    const newChord = parseChordString(`${chord.rootNote}9`);
-                    if (newChord) {
-                        suggestions.push({
-                            chord: newChord,
-                            technique: 'Extensión de Acorde',
-                            justification: 'Añade la 9na para un color más abierto (dom9).'
-                        });
-                    }
+        const commonTypes = ['maj7', 'm7', '7', 'dim7', '6'];
+        let matches = 0;
+        for (let i = 0; i < 12; i++) {
+            const root = INDEX_TO_SHARP_NAME[i];
+            if (root === chord.rootNote) continue;
+            for (const type of commonTypes) {
+                const testChord = parseChordString(`${root}${type}`);
+                if (!testChord) continue;
+                const testNotes = getChordNotes(testChord);
+                const testPitchClasses = new Set(testNotes.notesToPress.map(n => n % 12));
+                const intersection = [...testPitchClasses].filter(n => refPitchClasses.has(n));
+                if (intersection.length >= 3 && matches < 3) {
+                    const notesShared = intersection.map(n => INDEX_TO_SHARP_NAME[n]).join(', ');
+                    suggestions.push({
+                        chord: testChord,
+                        technique: 'Intercambiable por Nota Común',
+                        justification: `Comparte ${intersection.length} notas (${notesShared}).`
+                    });
+                    matches++;
                 }
             }
         }
         return suggestions;
     }
 
+    private getStyleSpecificVocabulary(chord: ChordAnalysis, key: DetectedKey, settings: ReharmonizationSettings): ChordSuggestion[] {
+        const suggestions: ChordSuggestion[] = [];
+        if (!chord.analysis) return [];
+        const { roman, func } = chord.analysis;
 
-    private scoreByVoiceLeading(suggestions: ChordSuggestion[], referenceChord: SequenceItem): ChordSuggestion[] {
+        // Gap 4: Vocabulario de estilos diferenciado
+        if (settings.style === 'gospel') {
+            if (roman === 'I') {
+                const ivRoot = transposeNote(key.key, 5);
+                const c1 = parseChordString(`${ivRoot}/${key.key}`);
+                if (c1) suggestions.push({ chord: c1, technique: 'Gospel Tonic', justification: 'IV sobre bajo de i' });
+            }
+            if (func === 'Dominant' || roman === 'IV') {
+                const dimRoot = transposeNote(chord.rootNote, -1);
+                const c1 = parseChordString(`${dimRoot}dim7`);
+                if (c1) suggestions.push({ chord: c1, technique: 'Gospel Approach', justification: 'Disminuido en tiempo fuerte' });
+            }
+        } else if (settings.style === 'neo-soul') {
+            if (func === 'Dominant') {
+                const c1 = parseChordString(`${chord.rootNote}9sus4`);
+                if (c1) suggestions.push({ chord: c1, technique: 'Neo-Soul Sus', justification: 'Suspensión 11na/9sus4 sin resolver clásica' });
+            }
+            if (roman === 'IV') {
+                const c1 = parseChordString(`${chord.rootNote}maj7#5`);
+                if (c1) suggestions.push({ chord: c1, technique: 'Neo-Soul Color', justification: 'maj7#5 moderno' });
+            }
+        } else if (settings.style === 'bolero') {
+            if (func === 'Dominant') {
+                const c1 = parseChordString(`${chord.rootNote}aug`);
+                if (c1) suggestions.push({ chord: c1, technique: 'Bolero Dominant', justification: 'Acorde aumentado alternativo' });
+            }
+            if (roman === 'V') {
+                const sharpFourRoot = transposeNote(key.key, 6);
+                const c1 = parseChordString(`${sharpFourRoot}dim7`);
+                if (c1) suggestions.push({ chord: c1, technique: 'Bolero Paso', justification: '#IVdim de paso hacia el V' });
+            }
+        }
+        return suggestions;
+    }
+
+    private scoreByVoiceLeading(suggestions: ChordSuggestion[], referenceChord: SequenceItem, settings: ReharmonizationSettings): ChordSuggestion[] {
         const refNotes = getChordNotes(referenceChord);
         const refPitchClasses = new Set(refNotes.notesToPress.map(n => n % 12));
         const refRootIndex = NOTE_TO_INDEX[referenceChord.rootNote] ?? 0;
 
+        // Gap 6: Voice leading evaluando 3 voces simuladas
         return [...suggestions].sort((a, b) => {
             const scoreChord = (s: ChordSuggestion): number => {
                 const sNotes = getChordNotes(s.chord);
                 const sPitchClasses = new Set(sNotes.notesToPress.map(n => n % 12));
                 const commonTones = [...sPitchClasses].filter(n => refPitchClasses.has(n)).length;
                 const sRootIndex = NOTE_TO_INDEX[s.chord.rootNote] ?? 0;
-                const rootDist = Math.min(
+                
+                let rootDist = Math.min(
                     (sRootIndex - refRootIndex + 12) % 12,
                     (refRootIndex - sRootIndex + 12) % 12
                 );
-                return (commonTones * 2) - (rootDist / 12);
+
+                let score = commonTones * 2;
+                
+                // Premiar semitono/tono (movimiento suave en bajo)
+                if (rootDist === 1 || rootDist === 2) score += 2;
+                // Penalizar saltos de 4ta o más
+                if (rootDist >= 5) score -= 1;
+
+                if (settings.style === 'bolero') {
+                    // Priorizar bajo cromático descendente
+                    const descDist = (refRootIndex - sRootIndex + 12) % 12;
+                    if (descDist === 1 || descDist === 2) score += 3;
+                }
+                
+                if (settings.style === 'gospel') {
+                    // Permitir saltos dramáticos
+                    if (rootDist === 5 || rootDist === 7) score += 1;
+                }
+
+                return score;
             };
             return scoreChord(b) - scoreChord(a);
         });
     }
 
-    public getSuggestionsForChord(chordItem: SequenceItem, key: DetectedKey, prevChordItem?: SequenceItem): ChordSuggestion[] {
+    public getSuggestionsForChord(chordItem: SequenceItem, key: DetectedKey, prevChordItem?: SequenceItem, settings: ReharmonizationSettings = { style: 'jazz', density: 'medium' }): ChordSuggestion[] {
         const analyzedChord = analyzeChordContext(chordItem, key);
         if (!analyzedChord) return [];
 
         let allSuggestions: ChordSuggestion[] = [];
 
-        allSuggestions.push(...this.getDiatonicSubstitutions(analyzedChord, key));
-        allSuggestions.push(...this.getTritoneSubstitution(analyzedChord));
-        allSuggestions.push(...this.getStyledVoicings(analyzedChord));
-        allSuggestions.push(...this.addExtensions(analyzedChord, key));
-        allSuggestions.push(...this.getModalInterchange(analyzedChord, key));
+        allSuggestions.push(...this.getDiatonicSubstitutions(analyzedChord, key, settings));
+        allSuggestions.push(...this.getTritoneSubstitution(analyzedChord, settings));
+        allSuggestions.push(...this.getStyledVoicings(analyzedChord, settings));
+        allSuggestions.push(...this.addExtensions(analyzedChord, key, settings));
+        allSuggestions.push(...this.getModalInterchange(analyzedChord, key, settings));
+        allSuggestions.push(...this.getCommonToneSubstitutions(analyzedChord, key, settings));
+        allSuggestions.push(...this.getStyleSpecificVocabulary(analyzedChord, key, settings));
 
         const uniqueSuggestions = allSuggestions.filter((suggestion, index, self) =>
             index === self.findIndex((s) => (
@@ -420,11 +518,11 @@ class IntelliHarmonixEngine {
         );
 
         return prevChordItem
-            ? this.scoreByVoiceLeading(uniqueSuggestions, prevChordItem)
+            ? this.scoreByVoiceLeading(uniqueSuggestions, prevChordItem, settings)
             : uniqueSuggestions;
     }
 
-    private getBassLineMelodicPassing(prevChord: ChordAnalysis, nextChord: ChordAnalysis, key: DetectedKey): ChordSuggestion[] {
+    private getBassLineMelodicPassing(prevChord: ChordAnalysis, nextChord: ChordAnalysis, key: DetectedKey, _settings: ReharmonizationSettings): ChordSuggestion[] {
         const suggestions: ChordSuggestion[] = [];
         const prevRootIndex = NOTE_TO_INDEX[prevChord.rootNote];
         const nextRootIndex = NOTE_TO_INDEX[nextChord.rootNote];
@@ -436,43 +534,31 @@ class IntelliHarmonixEngine {
         const ascDist = (nextRootIndex - prevRootIndex + 12) % 12;
         const descDist = (prevRootIndex - nextRootIndex + 12) % 12;
 
-        // Movimiento ascendente de 4ª (5 semitonos): C→F — insertar inversión I/3 (C/E)
         if (ascDist === 5 && isMajorFamily(prevChord.type)) {
             const thirdOfPrev = transposeNote(prevChord.rootNote, 4);
             const passingChord = parseChordString(`${prevChord.rootNote}/${thirdOfPrev}`);
             if (passingChord) {
-                suggestions.push({
-                    chord: passingChord,
-                    technique: 'Bajo Melódico Escalar',
-                    justification: `Línea de bajo ascendente: ${prevChord.rootNote}–${thirdOfPrev}–${nextChord.rootNote}.`
-                });
+                suggestions.push({ chord: passingChord, technique: 'Bajo Melódico Escalar', justification: `Línea de bajo ascendente: ${prevChord.rootNote}–${thirdOfPrev}–${nextChord.rootNote}.` });
             }
         }
 
-        // Movimiento descendente de 4ª (5 desc = 7 asc): F→C — bajo escalar F-E-D-C con acordes diatónicos
         if (descDist === 5) {
-            // Inserta el acorde diatónico cuya raíz está un tono abajo del acorde previo
             const stepDown = transposeNote(prevChord.rootNote, -2);
             const stepDownIndex = NOTE_TO_INDEX[stepDown];
             if (stepDownIndex !== undefined) {
                 const intervalFromKey = (stepDownIndex - keyRootIndex + 12) % 12;
                 const degreeIndex = scaleIntervals.indexOf(intervalFromKey);
                 if (degreeIndex !== -1) {
-                    const isDiatMinor = [1, 2, 5].includes(degreeIndex); // ii, iii, vi en mayor
+                    const isDiatMinor = [1, 2, 5].includes(degreeIndex);
                     const passingType = isDiatMinor ? 'm7' : '7';
                     const passingChord = parseChordString(`${stepDown}${passingType}`);
                     if (passingChord) {
-                        suggestions.push({
-                            chord: passingChord,
-                            technique: 'Bajo Melódico Escalar',
-                            justification: `Línea de bajo descendente hacia ${nextChord.rootNote}.`
-                        });
+                        suggestions.push({ chord: passingChord, technique: 'Bajo Melódico Escalar', justification: `Línea de bajo descendente hacia ${nextChord.rootNote}.` });
                     }
                 }
             }
         }
 
-        // Movimiento de 3ª menor ascendente (3 semitonos): ej. C→Eb — bajo C-D-Eb
         if (ascDist === 3) {
             const stepUp = transposeNote(prevChord.rootNote, 2);
             const stepUpIndex = NOTE_TO_INDEX[stepUp];
@@ -483,17 +569,12 @@ class IntelliHarmonixEngine {
                     const passingType = [1, 2, 5].includes(degreeIndex) ? 'm7' : 'maj7';
                     const passingChord = parseChordString(`${stepUp}${passingType}`);
                     if (passingChord) {
-                        suggestions.push({
-                            chord: passingChord,
-                            technique: 'Bajo Melódico Escalar',
-                            justification: `Rellena la 3ª menor con un acorde diatónico de paso.`
-                        });
+                        suggestions.push({ chord: passingChord, technique: 'Bajo Melódico Escalar', justification: `Rellena la 3ª menor.` });
                     }
                 }
             }
         }
 
-        // Movimiento de 3ª mayor ascendente (4 semitonos): ej. C→E — bajo C-D-E
         if (ascDist === 4) {
             const stepUp = transposeNote(prevChord.rootNote, 2);
             const stepUpIndex = NOTE_TO_INDEX[stepUp];
@@ -504,11 +585,7 @@ class IntelliHarmonixEngine {
                     const passingType = [1, 2, 5].includes(degreeIndex) ? 'm7' : 'maj7';
                     const passingChord = parseChordString(`${stepUp}${passingType}`);
                     if (passingChord) {
-                        suggestions.push({
-                            chord: passingChord,
-                            technique: 'Bajo Melódico Escalar',
-                            justification: `Rellena la 3ª mayor con un acorde diatónico de paso.`
-                        });
+                        suggestions.push({ chord: passingChord, technique: 'Bajo Melódico Escalar', justification: `Rellena la 3ª mayor.` });
                     }
                 }
             }
@@ -517,46 +594,35 @@ class IntelliHarmonixEngine {
         return suggestions;
     }
 
-    private getBackdoorPassing(_prevChord: ChordAnalysis, nextChord: ChordAnalysis, key: DetectedKey): ChordSuggestion[] {
+    private getBackdoorPassing(_prevChord: ChordAnalysis, nextChord: ChordAnalysis, key: DetectedKey, _settings: ReharmonizationSettings): ChordSuggestion[] {
         if (!nextChord.analysis) return [];
         const suggestions: ChordSuggestion[] = [];
         const keyRootIndex = NOTE_TO_INDEX[key.key];
         if (keyRootIndex === undefined) return [];
 
-        // Backdoor ii-V → I: cuando el destino es el I (mayor), ofrecer ivm7 → bVII7 como camino alternativo
         const nextRootIndex = NOTE_TO_INDEX[nextChord.rootNote];
         const isDestinationTonic =
             (nextChord.analysis.roman === 'I' || nextChord.analysis.roman === 'i') &&
             isMajorFamily(nextChord.type);
 
         if (isDestinationTonic && nextRootIndex !== undefined) {
-            // ivm7: 4ª menor sobre la tónica destino
             const minorFourthRoot = transposeNote(key.key, 5);
             const backdoorTwo = parseChordString(`${minorFourthRoot}m7`);
             if (backdoorTwo) {
-                suggestions.push({
-                    chord: backdoorTwo,
-                    technique: 'Backdoor ii-V',
-                    justification: `ivm7 inicia el camino backdoor (iv–bVII7) hacia ${formatChordName(nextChord, { style: 'short' })}.`
-                });
+                suggestions.push({ chord: backdoorTwo, technique: 'Backdoor ii-V', justification: `ivm7 inicia el camino backdoor.` });
             }
 
-            // bVII7: dominante a dos semitonos bajo la tónica
             const backdoorDominantRoot = transposeNote(key.key, 10);
             const backdoorDominant = parseChordString(`${backdoorDominantRoot}7`);
             if (backdoorDominant) {
-                suggestions.push({
-                    chord: backdoorDominant,
-                    technique: 'Backdoor ii-V',
-                    justification: `bVII7 resuelve hacia ${formatChordName(nextChord, { style: 'short' })} con movimiento de semitono descendente en el bajo.`
-                });
+                suggestions.push({ chord: backdoorDominant, technique: 'Backdoor ii-V', justification: `bVII7 resuelve suave.` });
             }
         }
 
         return suggestions;
     }
 
-    public getPassingChordSuggestions(prevChordItem: SequenceItem, nextChordItem: SequenceItem, key: DetectedKey): ChordSuggestion[] {
+    public getPassingChordSuggestions(prevChordItem: SequenceItem, nextChordItem: SequenceItem, key: DetectedKey, settings: ReharmonizationSettings = { style: 'jazz', density: 'medium' }): ChordSuggestion[] {
         const prevChord = analyzeChordContext(prevChordItem, key);
         const nextChord = analyzeChordContext(nextChordItem, key);
 
@@ -565,55 +631,59 @@ class IntelliHarmonixEngine {
         const prevRootIndex = NOTE_TO_INDEX[prevChord.rootNote];
         const nextRootIndex = NOTE_TO_INDEX[nextChord.rootNote];
 
-        suggestions.push(...this.getSecondaryDominants(nextChord));
+        suggestions.push(...this.getSecondaryDominants(nextChord, settings));
 
         if (prevRootIndex !== undefined && nextRootIndex !== undefined) {
-            // Ascendente: ej. C → D, acorde de paso = C#dim7
-            if ((prevRootIndex + 2) % 12 === nextRootIndex) {
+            // Gap 5: Passing chords (Aproximación doble, pedal, tritono)
+            const ascDist = (nextRootIndex - prevRootIndex + 12) % 12;
+            const descDist = (prevRootIndex - nextRootIndex + 12) % 12;
+
+            // Chromatic approach (dim7) directionally aware
+            if (ascDist === 2 || ascDist === 1) {
                 const passingRoot = transposeNote(prevChord.rootNote, 1);
                 const passingChord = parseChordString(`${passingRoot}dim7`);
-                if (passingChord) {
-                    suggestions.push({
-                        chord: passingChord,
-                        technique: 'Acorde de Paso Disminuido',
-                        justification: 'Conexión cromática ascendente suave.'
-                    });
-                }
+                if (passingChord) suggestions.push({ chord: passingChord, technique: 'Acorde de Paso Disminuido', justification: 'Ascendente cromático.' });
             }
-            // Descendente: ej. D → C, acorde de paso = C#dim7 (= Db dim7)
-            if ((nextRootIndex + 2) % 12 === prevRootIndex) {
+            if (descDist === 2 || descDist === 1) {
                 const passingRoot = transposeNote(nextChord.rootNote, 1);
                 const passingChord = parseChordString(`${passingRoot}dim7`);
-                if (passingChord) {
-                    suggestions.push({
-                        chord: passingChord,
-                        technique: 'Acorde de Paso Disminuido',
-                        justification: 'Conexión cromática descendente suave.'
-                    });
-                }
+                if (passingChord) suggestions.push({ chord: passingChord, technique: 'Acorde de Paso Disminuido', justification: 'Descendente cromático.' });
+            }
+
+            // Aproximación doble cromática (jazz/neo-soul) - Gap 5
+            if ((settings.style === 'jazz' || settings.style === 'neo-soul') && settings.density === 'high') {
+                const approachUp = parseChordString(`${transposeNote(nextChord.rootNote, -1)}7alt`);
+                if (approachUp) suggestions.push({ chord: approachUp, technique: 'Aproximación Cromática', justification: 'Aproximación desde abajo' });
+            }
+
+            // Acordes Pedal - Gap 5
+            if (settings.density !== 'low' && prevRootIndex !== nextRootIndex) {
+                const pedal = parseChordString(`${prevChord.rootNote}/${nextChord.rootNote}`);
+                if (pedal) suggestions.push({ chord: pedal, technique: 'Acorde Pedal', justification: 'Mantiene raíz anterior sobre bajo nuevo' });
+            }
+
+            // Aumentados de paso (Bolero) - Gap 5
+            if (settings.style === 'bolero' && (ascDist === 2 || descDist === 2)) {
+                const aug = parseChordString(`${prevChord.rootNote}aug`);
+                if (aug) suggestions.push({ chord: aug, technique: 'Aumentado de Paso', justification: 'Paso suave bolero' });
+            }
+
+            // Sus4 resolviendo (Neo-soul) - Gap 5
+            if (settings.style === 'neo-soul' && nextChord.analysis.func === 'Dominant') {
+                const sus = parseChordString(`${nextChord.rootNote}9sus4`);
+                if (sus) suggestions.push({ chord: sus, technique: 'Sus4 Approach', justification: 'Suspensión hacia el dominante' });
             }
         }
         
         if (prevChord.analysis?.roman === 'I' && nextChord.analysis.roman === 'vi') {
             const thirdOfPrev = transposeNote(prevChord.rootNote, 4);
             const passingChord = parseChordString(`${prevChord.rootNote}/${thirdOfPrev}`);
-            if (passingChord) {
-                suggestions.push({
-                    chord: passingChord,
-                    technique: 'Bajo de Paso por Inversión',
-                    justification: `Usa I en 1ra inversión (${formatChordName(passingChord, {style: 'short'})}) para un bajo melódico.`
-                });
-            }
-             const dominantOfPrev = transposeNote(prevChord.rootNote, 7);
-             const thirdOfDominant = transposeNote(dominantOfPrev, 4);
-             const passingChordV7 = parseChordString(`${dominantOfPrev}7/${thirdOfDominant}`);
-             if (passingChordV7) {
-                 suggestions.push({
-                     chord: passingChordV7,
-                     technique: 'Bajo de Paso Cromático',
-                     justification: `Usa el V7 en 1ra inversión (${formatChordName(passingChordV7, {style: 'short'})}) para conectar.`
-                 });
-             }
+            if (passingChord) suggestions.push({ chord: passingChord, technique: 'Bajo de Paso por Inversión', justification: `I en 1ra inversión.` });
+            
+            const dominantOfPrev = transposeNote(prevChord.rootNote, 7);
+            const thirdOfDominant = transposeNote(dominantOfPrev, 4);
+            const passingChordV7 = parseChordString(`${dominantOfPrev}7/${thirdOfDominant}`);
+            if (passingChordV7) suggestions.push({ chord: passingChordV7, technique: 'Bajo de Paso Cromático', justification: `V7 en 1ra inversión.` });
         }
         
         if (!['I', 'i', 'vii°'].includes(nextChord.analysis.roman)) {
@@ -622,33 +692,75 @@ class IntelliHarmonixEngine {
             const targetIsMajorOrDominant = isMajorFamily(nextChord.type) || isDominantFamily(nextChord.type);
             const relatedTwoType = targetIsMajorOrDominant ? 'm7' : 'm7b5';
             const relatedTwoChord = parseChordString(`${relatedTwoRoot}${relatedTwoType}`);
-            if (relatedTwoChord) {
-                 suggestions.push({
-                    chord: relatedTwoChord,
-                    technique: 'II-V Relacionado (el II)',
-                    justification: `Inicia el II-V que resuelve a ${formatChordName(nextChord, { style: 'short' })}.`
-                });
-            }
+            if (relatedTwoChord) suggestions.push({ chord: relatedTwoChord, technique: 'II-V Relacionado (el II)', justification: `Inicia II-V hacia ${formatChordName(nextChord, { style: 'short' })}.` });
         }
 
-        suggestions.push(...this.getBassLineMelodicPassing(prevChord, nextChord, key));
-        suggestions.push(...this.getBackdoorPassing(prevChord, nextChord, key));
+        suggestions.push(...this.getBassLineMelodicPassing(prevChord, nextChord, key, settings));
+        suggestions.push(...this.getBackdoorPassing(prevChord, nextChord, key, settings));
 
-        return suggestions.filter((suggestion, index, self) =>
+        // Tritono del passing chord si es dominante - Gap 5
+        const tritoneSuggestions: ChordSuggestion[] = [];
+        for (const s of suggestions) {
+            if (isDominantFamily(s.chord.type)) {
+                const tritoneRoot = transposeNote(s.chord.rootNote, 6);
+                const tritoneChord = parseChordString(`${tritoneRoot}7`);
+                if (tritoneChord) {
+                    tritoneSuggestions.push({
+                        chord: tritoneChord,
+                        technique: 'Tritono del Acorde de Paso',
+                        justification: `Sustituto tritono del paso ${formatChordName(s.chord, { style: 'short' })}`
+                    });
+                }
+            }
+        }
+        suggestions.push(...tritoneSuggestions);
+
+        return this.scoreByVoiceLeading(suggestions.filter((suggestion, index, self) =>
             index === self.findIndex((s) => (
                 formatChordName(s.chord, { style: 'short' }) === formatChordName(suggestion.chord, { style: 'short' })
             ))
-        );
+        ), prevChordItem, settings);
     }
 
     public applyGlobalReharmonization(progression: SequenceItem[], key: DetectedKey, settings: ReharmonizationSettings): ProcessedSong {
         console.log(`Aplicando rearmonización global en la tonalidad de ${key.key} ${key.scale} con los ajustes:`, settings);
         
-        const reharmonizedChords = progression.map(chord => {
+        // Gap 7 & 8: Pipeline completo
+        let newProgression: SequenceItem[] = [];
+        
+        for (let i = 0; i < progression.length; i++) {
+            const current = progression[i];
+            const next = progression[i + 1];
+
+            // 1. Extender y colorear el acorde actual
+            let suggestedCurrent = current;
+            const currentSuggs = this.getSuggestionsForChord(current, key, undefined, settings);
+            const extSugg = currentSuggs.find(s => s.technique.includes('Extens') || s.technique.includes('Color') || s.technique.includes('Gospel') || s.technique.includes('Bolero'));
+            if (extSugg && settings.density !== 'low') {
+                suggestedCurrent = extSugg.chord;
+            }
+            newProgression.push(suggestedCurrent);
+
+            // 2. Insertar passing chords
+            if (next) {
+                const passSuggs = this.getPassingChordSuggestions(suggestedCurrent, next, key, settings);
+                if (passSuggs.length > 0) {
+                    if (settings.density === 'high') {
+                        // Insertamos el passing chord más alto calificado
+                        newProgression.push(passSuggs[0].chord);
+                    } else if (settings.density === 'medium' && i % 2 === 0) {
+                        // Densidad media: menos frecuente
+                        newProgression.push(passSuggs[0].chord);
+                    }
+                }
+            }
+        }
+
+        const reharmonizedChords = newProgression.map(chord => {
             return { chord: chord, position: 0 };
         });
 
-        return { lines: [{ lyrics: '', chords: reharmonizedChords }], allChords: progression };
+        return { lines: [{ lyrics: '', chords: reharmonizedChords }], allChords: newProgression };
     }
 }
 

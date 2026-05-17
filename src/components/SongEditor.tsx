@@ -43,26 +43,26 @@ const editorTheme = EditorView.theme({
     width: '1ch',
     mixBlendMode: 'difference',
   },
-  '.cm-chord': { color: '#60a5fa', fontWeight: 'bold', cursor: 'pointer', padding: '0px 5px', borderRadius: '3px', '&:hover': { backgroundColor: '#27272a' }, fontSize: '0.86em' },
+  '.cm-chord': { color: '#60a5fa', fontWeight: 'bold', cursor: 'pointer', padding: '0px 2px', borderRadius: '3px', '&:hover': { backgroundColor: '#27272a' }, fontSize: '0.7em' },
   '.cm-lyric': { color: '#f8fafc' },
 });
 
-const findChordAtPosition = (tree: any, pos: number, docLength: number) => {
+const findChordAtPosition = (tree: any, pos: number, docLength: number, exact: boolean = false) => {
   let chordNode = tree.resolveInner(pos, 1);
 
-  if (chordNode.type.name !== 'chord') {
-    for (let offset = 1; offset <= 4 && pos - offset >= 0; offset++) {
+  if (chordNode.type.name !== 'chord' && !exact) {
+    for (let offset = 1; offset <= 2 && pos - offset >= 0; offset++) {
       const testNode = tree.resolveInner(pos - offset, 1);
       if (testNode.type.name === 'chord') {
-        if (pos <= testNode.to + 2) { chordNode = testNode; break; }
+        if (pos <= testNode.to + 1) { chordNode = testNode; break; }
       }
     }
 
     if (chordNode.type.name !== 'chord') {
-      for (let offset = 1; offset <= 4 && pos + offset < docLength; offset++) {
+      for (let offset = 1; offset <= 2 && pos + offset < docLength; offset++) {
         const testNode = tree.resolveInner(pos + offset, 1);
         if (testNode.type.name === 'chord') {
-          if (pos >= testNode.from - 2) { chordNode = testNode; break; }
+          if (pos >= testNode.from - 1) { chordNode = testNode; break; }
         }
       }
     }
@@ -90,6 +90,9 @@ const chordInteractionPlugin = (
 ) => {
   return EditorView.domEventHandlers({
     mousedown(event, view) {
+      if (event.detail >= 2) {
+        event.preventDefault(); // Evita la selección de texto nativa del navegador en doble clic
+      }
       const cb = cbRef.current;
       const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
       if (pos === null) return;
@@ -145,7 +148,7 @@ const chordInteractionPlugin = (
       if (pos === null) return;
 
       const tree = syntaxTree(view.state);
-      const chordNode = findChordAtPosition(tree, pos, view.state.doc.length);
+      const chordNode = findChordAtPosition(tree, pos, view.state.doc.length, true);
 
       if (chordNode) {
         const transposedChordText = view.state.sliceDoc(chordNode.from, chordNode.to);
@@ -187,8 +190,10 @@ const chordInteractionPlugin = (
 
         if (prevChord && nextChord) {
           cb.onReharmonizeSpaceClick(lineIndex, charIndex, prevChord, nextChord, { x: event.clientX, y: event.clientY + 20 });
+          return true;
         }
       }
+      return true;
     },
 
     mouseleave(_event, _view) {

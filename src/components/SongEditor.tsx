@@ -170,23 +170,38 @@ const chordInteractionPlugin = (
         const lineIndex = line.number - 1;
         const charIndex = pos - line.from;
 
-        const lineChords: SequenceItem[] = [];
+        let prevChord: SequenceItem | null = null;
+        let nextChord: SequenceItem | null = null;
+
         syntaxTree(view.state).iterate({
-          from: line.from,
-          to: line.to,
+          from: 0,
+          to: pos,
           enter: (node) => {
             if (node.type.name === 'chord') {
               const chordText = view.state.sliceDoc(node.from, node.to);
               const parsed = parseChordString(chordText);
               if (parsed) {
-                lineChords.push({ ...parsed, id: Date.now(), raw: chordText, position: node.from - line.from });
+                const nodeLine = view.state.doc.lineAt(node.from);
+                prevChord = { ...parsed, id: Date.now(), raw: chordText, position: node.from - nodeLine.from };
               }
             }
           }
         });
 
-        const prevChord = lineChords.filter(c => c.position! < charIndex).pop() || null;
-        const nextChord = lineChords.find(c => c.position! >= charIndex) || null;
+        syntaxTree(view.state).iterate({
+          from: pos,
+          to: view.state.doc.length,
+          enter: (node) => {
+            if (node.type.name === 'chord' && !nextChord) {
+              const chordText = view.state.sliceDoc(node.from, node.to);
+              const parsed = parseChordString(chordText);
+              if (parsed) {
+                const nodeLine = view.state.doc.lineAt(node.from);
+                nextChord = { ...parsed, id: Date.now(), raw: chordText, position: node.from - nodeLine.from };
+              }
+            }
+          }
+        });
 
         if (prevChord && nextChord) {
           cb.onReharmonizeSpaceClick(lineIndex, charIndex, prevChord, nextChord, { x: event.clientX, y: event.clientY + 20 });
